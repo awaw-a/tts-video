@@ -28,7 +28,7 @@
 
 ## 安装
 
-建议使用 Python 3.10 或更高版本。
+主程序建议使用 Python 3.10 或更高版本。若要在同一环境中运行 IndexTTS，建议使用 Python 3.10；IndexTTS 的部分依赖不支持 Python 3.14。
 
 ```bash
 python -m venv .venv
@@ -94,6 +94,8 @@ IndexTTS 准备方式：
 1. 克隆 IndexTTS 官方仓库到 `tts-video/index-tts`。
 2. 按 IndexTTS 官方 README 安装依赖并下载 checkpoints。
 3. 先确认 IndexTTS 自己的 demo 可以生成语音。
+
+本仓库的 `requirements.txt` 已整合 IndexTTS 运行依赖。Windows + NVIDIA 环境会安装 PyTorch CUDA 12.8 轮子，下载体积较大，建议预留 10GB 以上磁盘空间。
 
 如果你希望把 IndexTTS 放在兄弟目录，也可以启动服务前设置：
 
