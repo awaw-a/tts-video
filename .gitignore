@@ -20,4 +20,4 @@ data/cache/*
 !data/cache/.gitkeep
 data/voices/*
 !data/voices/.gitkeep
-
+data/indextts_server/
