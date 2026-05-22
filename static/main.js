@@ -16,7 +16,7 @@ form.addEventListener("submit", async (event) => {
   const formData = new FormData(form);
   submitButton.disabled = true;
   resultPanel.hidden = true;
-  setStatus("生成中，请稍候...");
+  setStatus("正在生成语音，请稍等……");
 
   try {
     const response = await fetch("/api/generate", {

@@ -13,13 +13,13 @@ from modules.render.image_video import burn_subtitles, create_static_video
 from modules.subtitle.ass_generator import generate_ass
 from modules.subtitle.splitter import split_script_to_sentences
 from modules.subtitle.srt_generator import generate_srt
-from modules.tts.mock_tts import MockTTS
+from modules.tts.factory import get_tts_engine
 
 
 settings = load_config()
 ensure_runtime_dirs(settings.paths)
 
-app = FastAPI(title="tts-video", version="0.1.0")
+app = FastAPI(title="tts-video", version="0.2.0")
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "static"), name="static")
 
 
@@ -63,7 +63,7 @@ async def generate_video(
     aspect_ratio: str = Form(settings.video.default_aspect_ratio),
     subtitle_style: str = Form(settings.subtitle.default_style),
 ) -> dict:
-    """执行 MVP 生成流程：保存素材、处理图片、生成字幕、合成视频。"""
+    """执行生成流程：参考音频 -> TTS 输出 -> 字幕 -> 静态图视频 -> final.mp4。"""
     task = create_task()
     task_id = task.task_id
 
@@ -92,24 +92,26 @@ async def generate_video(
 
         image_suffix = get_upload_suffix(image)
         audio_suffix = get_upload_suffix(audio)
-        image_path = task_upload_dir / f"image{image_suffix}"
-        audio_path = task_upload_dir / f"audio{audio_suffix}"
+        image_path = task_upload_dir / f"source_image{image_suffix}"
+        reference_audio_path = task_upload_dir / f"reference_audio{audio_suffix}"
         script_path = task_upload_dir / "script.txt"
 
         await save_upload_file(image, image_path)
-        await save_upload_file(audio, audio_path)
+        await save_upload_file(audio, reference_audio_path)
         script_path.write_text(clean_script, encoding="utf-8")
 
         validate_image_file(image_path)
-        source_audio_path = ensure_wav_or_supported_audio(audio_path)
+        reference_audio_path = ensure_wav_or_supported_audio(reference_audio_path)
 
-        # 当前 MockTTS 直接复制上传音频，后续可以替换成真实 TTS 输出。
-        synthesized_audio_path = task_cache_dir / f"speech{source_audio_path.suffix.lower()}"
-        MockTTS().synthesize(clean_script, source_audio_path, synthesized_audio_path)
-        audio_duration = get_audio_duration(synthesized_audio_path)
-
+        # 图片预处理和 TTS 输出都放在 cache 中，uploads 只保留用户原始素材。
         processed_image_path = task_cache_dir / "processed.png"
         prepare_canvas_image(image_path, processed_image_path, width, height)
+
+        # audio 现在是参考音频；真正进入视频的是 TTS 后端生成的 generated.wav。
+        tts_engine = get_tts_engine(settings)
+        generated_audio_path = task_cache_dir / "generated.wav"
+        tts_engine.synthesize(clean_script, reference_audio_path, generated_audio_path)
+        audio_duration = get_audio_duration(generated_audio_path)
 
         sentences = split_script_to_sentences(
             clean_script,
@@ -140,7 +142,7 @@ async def generate_video(
         final_video_path = task_output_dir / "final.mp4"
         create_static_video(
             processed_image_path,
-            synthesized_audio_path,
+            generated_audio_path,
             temp_video_path,
             width=width,
             height=height,

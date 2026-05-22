@@ -46,6 +46,16 @@ class SubtitleConfig:
 
 
 @dataclass
+class TTSConfig:
+    """TTS 后端配置；默认使用 mock，避免缺少外部服务时无法启动。"""
+
+    backend: str = "mock"
+    indextts_api_url: str = "http://127.0.0.1:9000"
+    request_timeout: int = 600
+    split_by_sentence: bool = False
+
+
+@dataclass
 class AppSettings:
     """应用总配置对象。"""
 
@@ -53,6 +63,7 @@ class AppSettings:
     paths: PathsConfig
     video: VideoConfig
     subtitle: SubtitleConfig
+    tts: TTSConfig
 
 
 def load_config(config_path: Path | None = None) -> AppSettings:
@@ -67,4 +78,5 @@ def load_config(config_path: Path | None = None) -> AppSettings:
         paths=PathsConfig(**raw_data.get("paths", {})),
         video=VideoConfig(**raw_data.get("video", {})),
         subtitle=SubtitleConfig(**raw_data.get("subtitle", {})),
+        tts=TTSConfig(**raw_data.get("tts", {})),
     )

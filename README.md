@@ -4,21 +4,22 @@
 
 角色图片 + 音频 + 文案 -> 字幕文件 -> 静态图视频 -> 烧录字幕 -> MP4。
 
-当前 MVP 不接入真实 IndexTTS、F5-TTS、LLM，也不做角色动作、口型同步。音频会直接使用用户上传的测试音频，后续可以替换为真实 TTS 模块。
+当前默认使用 mock TTS：直接复用上传音频，方便开发测试。也可以切换为 `indextts_api`，通过外部 IndexTTS API 服务根据参考音频和文案生成克隆语音。
 
 ## 当前功能
 
 - 上传 png/jpg/jpeg/webp 角色图片。
-- 上传 wav/mp3/m4a 音频。
+- 上传 wav/mp3/m4a 参考音频 / 测试音频。
 - 输入文案并自动切分字幕。
 - 支持 16:9、9:16、1:1 三种视频比例。
 - 支持 white_black、yellow_black、bilibili_large 三种 ASS 字幕样式。
 - 使用 ffmpeg 合成静态图片视频并烧录字幕。
 - 输出 `data/outputs/{task_id}/final.mp4`。
+- 支持两种 TTS 后端：`mock` 和 `indextts_api`。
 
 ## 后续计划
 
-- 接入 IndexTTS。
+- 增加分句 TTS，提高字幕与语音同步准确度。
 - 接入 F5-TTS。
 - 接入 CosyVoice。
 - 接入 LLM 文案生成。
@@ -74,6 +75,101 @@ sudo apt install ffmpeg
 
 如需更新 Windows 内置 ffmpeg，可从 https://www.gyan.dev/ffmpeg/builds/ 下载 `ffmpeg-release-essentials.zip`，并替换 `third_party/ffmpeg/windows/bin/` 下的 `ffmpeg.exe` 和 `ffprobe.exe`。
 
+## 接入 IndexTTS
+
+当前支持两种 TTS 后端：
+
+- `mock`：复制上传音频，适合测试和调试。
+- `indextts_api`：调用外部 IndexTTS 服务，使用参考音频生成克隆语音。
+
+推荐目录结构：
+
+```text
+tts-video/
+  index-tts/
+```
+
+IndexTTS 准备方式：
+
+1. 克隆 IndexTTS 官方仓库到 `tts-video/index-tts`。
+2. 按 IndexTTS 官方 README 安装依赖并下载 checkpoints。
+3. 先确认 IndexTTS 自己的 demo 可以生成语音。
+
+如果你希望把 IndexTTS 放在兄弟目录，也可以启动服务前设置：
+
+```bash
+export INDEXTTS_REPO="../index-tts"
+export INDEXTTS_MODEL_DIR="../index-tts/checkpoints"
+export INDEXTTS_CFG_PATH="../index-tts/checkpoints/config.yaml"
+```
+
+启动 IndexTTS API 服务：
+
+Windows:
+
+```bat
+scripts\run_indextts_server.bat
+```
+
+Linux / Mac:
+
+```bash
+bash scripts/run_indextts_server.sh
+```
+
+也可以手动启动：
+
+```bash
+uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
+```
+
+健康检查：
+
+```text
+http://127.0.0.1:9000/health
+```
+
+如果模型加载成功，应返回 `model_loaded: true`。
+
+切换到 IndexTTS API 模式，修改 `configs/default.yaml`：
+
+```yaml
+tts:
+  backend: "indextts_api"
+  indextts_api_url: "http://127.0.0.1:9000"
+  request_timeout: 600
+  split_by_sentence: false
+```
+
+启动主程序：
+
+```bash
+uvicorn app:app --reload
+```
+
+使用方式：
+
+1. 上传图片。
+2. 上传参考音频。
+3. 输入文案。
+4. 点击生成。
+5. 下载 `final.mp4`。
+
+常见问题：
+
+- `/health` 访问失败：IndexTTS 服务没启动，或端口不是 9000。
+- `model_loaded: false`：检查 `INDEXTTS_REPO`、`INDEXTTS_MODEL_DIR`、`INDEXTTS_CFG_PATH` 是否正确。
+- 500 错误：通常是模型路径、checkpoints、CUDA 环境或 IndexTTS 依赖不正确。
+- CUDA OOM：关闭并发、缩短文本、开启 FP16，或换更大显存显卡。
+- 生成很慢：首次加载模型较慢，后续请求通常会快一些。
+- Mac 开发：Mac 可以跑 tts-video 主程序，IndexTTS 服务建议在 Windows + NVIDIA 机器上跑。
+- 中文路径问题：建议项目和模型路径使用英文目录。
+
+合规提醒：
+
+- 只使用本人或已获得授权的参考音频。
+- 不要用来冒充真人或制作误导性内容。
+
 ## 启动
 
 ```bash
@@ -90,7 +186,7 @@ http://127.0.0.1:8000
 
 1. 打开页面。
 2. 上传一张角色图片。
-3. 上传一段 wav/mp3/m4a 音频。
+3. 上传一段 wav/mp3/m4a 参考音频 / 测试音频。
 4. 输入中文或英文文案。
 5. 选择视频比例和字幕样式。
 6. 点击生成。

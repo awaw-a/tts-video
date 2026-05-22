@@ -8,6 +8,9 @@ env/
 .env
 .DS_Store
 
+# IndexTTS 是独立仓库，模型文件很大，不纳入 tts-video 版本管理。
+index-tts/
+
 data/uploads/*
 !data/uploads/.gitkeep
 data/outputs/*

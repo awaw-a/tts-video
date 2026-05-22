@@ -19,3 +19,8 @@ subtitle:
   max_chars_per_line_cjk: 18
   min_duration: 1.2
 
+tts:
+  backend: "mock"
+  indextts_api_url: "http://127.0.0.1:9000"
+  request_timeout: 600
+  split_by_sentence: false

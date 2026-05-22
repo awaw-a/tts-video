@@ -5,4 +5,5 @@ pillow
 pydub
 audioop-lts; python_version >= "3.13"
 pyyaml
+requests
 
