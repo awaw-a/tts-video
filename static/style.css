@@ -1,0 +1,199 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #f4f6f8;
+  color: #17202a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.app-shell {
+  width: 100%;
+  min-height: 100vh;
+  padding: 32px 20px;
+}
+
+.workspace {
+  width: min(980px, 100%);
+  margin: 0 auto;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 18px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 760;
+}
+
+.topbar p {
+  margin-top: 8px;
+  color: #637083;
+  font-size: 15px;
+}
+
+.panel {
+  background: #ffffff;
+  border: 1px solid #d9e0e8;
+  border-radius: 8px;
+  padding: 22px;
+  box-shadow: 0 12px 34px rgba(29, 43, 58, 0.08);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.field span {
+  font-size: 14px;
+  font-weight: 700;
+  color: #2c3745;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid #c9d3df;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17202a;
+  font: inherit;
+  font-size: 15px;
+}
+
+input,
+select {
+  min-height: 44px;
+  padding: 9px 11px;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 180px;
+  padding: 12px;
+  line-height: 1.55;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid #2e83ff;
+  outline-offset: 1px;
+  border-color: #2e83ff;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+button,
+.download-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border-radius: 6px;
+  border: 0;
+  padding: 0 18px;
+  background: #1769e0;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.66;
+}
+
+.status-text {
+  color: #637083;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.status-text.error {
+  color: #c5362f;
+  font-weight: 700;
+}
+
+.result-panel {
+  margin-top: 18px;
+}
+
+.result-panel h2 {
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
+.result-panel p {
+  margin-bottom: 14px;
+  color: #3f4b59;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 700px) {
+  .app-shell {
+    padding: 20px 14px;
+  }
+
+  .topbar {
+    align-items: flex-start;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .panel {
+    padding: 16px;
+  }
+
+  .field-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  button,
+  .download-link {
+    width: 100%;
+  }
+}

@@ -1,0 +1,21 @@
+app:
+  host: "127.0.0.1"
+  port: 8000
+
+paths:
+  uploads_dir: "data/uploads"
+  outputs_dir: "data/outputs"
+  cache_dir: "data/cache"
+  voices_dir: "data/voices"
+
+video:
+  default_aspect_ratio: "16:9"
+  fps: 30
+  crf: 18
+  audio_bitrate: "192k"
+
+subtitle:
+  default_style: "yellow_black"
+  max_chars_per_line_cjk: 18
+  min_duration: 1.2
+

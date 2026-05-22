@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tts-video</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <h1>静态角色口播视频生成器</h1>
+            <p>图片 + 音频 + 文案 -> MP4</p>
+          </div>
+        </header>
+
+        <form id="generateForm" class="panel">
+          <div class="field-grid">
+            <label class="field">
+              <span>角色图片</span>
+              <input id="image" name="image" type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" required />
+            </label>
+
+            <label class="field">
+              <span>音频</span>
+              <input id="audio" name="audio" type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" required />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>文案</span>
+            <textarea id="script" name="script" rows="9" placeholder="请输入要显示为字幕的文案" required></textarea>
+          </label>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>视频比例</span>
+              <select id="aspect_ratio" name="aspect_ratio">
+                <option value="16:9" selected>16:9 - 1920x1080</option>
+                <option value="9:16">9:16 - 1080x1920</option>
+                <option value="1:1">1:1 - 1080x1080</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>字幕样式</span>
+              <select id="subtitle_style" name="subtitle_style">
+                <option value="white_black">white_black</option>
+                <option value="yellow_black" selected>yellow_black</option>
+                <option value="bilibili_large">bilibili_large</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="actions">
+            <button id="submitButton" type="submit">生成视频</button>
+            <span id="statusText" class="status-text">等待上传</span>
+          </div>
+        </form>
+
+        <section id="resultPanel" class="panel result-panel" hidden>
+          <h2>生成结果</h2>
+          <p id="taskText"></p>
+          <a id="downloadLink" class="download-link" href="#" download>下载 MP4</a>
+        </section>
+      </section>
+    </main>
+
+    <script src="/static/main.js"></script>
+  </body>
+</html>
+
