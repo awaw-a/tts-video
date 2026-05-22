@@ -28,7 +28,28 @@
 
 ## 安装
 
-主程序建议使用 Python 3.10 或更高版本。若要在同一环境中运行 IndexTTS，建议使用 Python 3.10；IndexTTS 的部分依赖不支持 Python 3.14。
+Windows 用户克隆仓库后，建议直接运行一键安装脚本：
+
+```bat
+install.bat
+```
+
+脚本会自动完成：
+
+- 创建 `.venv310` 虚拟环境。
+- 安装 `requirements.txt` 中的主程序和 IndexTTS 运行依赖。
+- 下载 Windows 版 ffmpeg 到 `third_party/ffmpeg/windows/bin/`。
+- 克隆 `index-tts` 外部仓库。
+- 下载 IndexTTS-2 checkpoints 和运行时依赖模型。
+- 修补 IndexTTS 的 Hugging Face 缓存路径，使其使用项目内的 `index-tts/checkpoints/hf_cache`。
+
+如果只想安装代码依赖、暂时不下载模型，可以运行：
+
+```bat
+install.bat -SkipModels
+```
+
+手动安装时，主程序建议使用 Python 3.10 或更高版本。若要在同一环境中运行 IndexTTS，建议使用 Python 3.10；IndexTTS 的部分依赖不支持 Python 3.14。
 
 ```bash
 python -m venv .venv310
@@ -54,9 +75,9 @@ pip install -r requirements.txt
 
 ## ffmpeg 说明
 
-本项目使用 ffmpeg 命令行合成视频、读取部分音频格式和烧录字幕。Windows 版已内置 `third_party/ffmpeg/windows/bin/ffmpeg.exe` 和 `ffprobe.exe`，正常情况下不需要用户额外安装 ffmpeg。
+本项目使用 ffmpeg 命令行合成视频、读取部分音频格式和烧录字幕。Windows 用户运行 `install.bat` 后，会自动下载 `third_party/ffmpeg/windows/bin/ffmpeg.exe` 和 `ffprobe.exe`，正常情况下不需要手动安装 ffmpeg。
 
-内置版本来自 gyan.dev 的 Windows release essentials 静态构建，包含本项目需要的 libx264、AAC、libass 等能力。程序会优先使用项目内置 ffmpeg；如果内置文件不存在，则回退查找系统 PATH 中的 `ffmpeg`。
+下载版本来自 gyan.dev 的 Windows release essentials 静态构建，包含本项目需要的 libx264、AAC、libass 等能力。程序会优先使用项目内的 ffmpeg；如果文件不存在，则回退查找系统 PATH 中的 `ffmpeg`。
 
 macOS / Linux 暂未内置二进制文件，需要自行安装 ffmpeg：
 
@@ -173,6 +194,24 @@ uvicorn app:app --reload
 - 不要用来冒充真人或制作误导性内容。
 
 ## 启动
+
+Windows 一键启动完整链路（IndexTTS API + tts-video 主程序）：
+
+```bat
+start_all.bat
+```
+
+脚本会等待 `http://127.0.0.1:9000/health` 返回 `model_loaded: true`，再启动 `http://127.0.0.1:8000` 并打开浏览器。使用期间请保持两个服务窗口打开。
+
+Windows 一键关闭服务：
+
+```bat
+stop_all.bat
+```
+
+它会关闭监听 8000 和 9000 端口的 tts-video / IndexTTS 服务。
+
+手动启动主程序：
 
 ```bash
 uvicorn app:app --reload
