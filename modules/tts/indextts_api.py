@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -12,7 +13,13 @@ class IndexTTSApiTTS(BaseTTS):
         self.api_url = api_url.rstrip("/")
         self.timeout = timeout
 
-    def synthesize(self, text: str, voice_ref_path: Path, output_path: Path) -> Path:
+    def synthesize(
+        self,
+        text: str,
+        voice_ref_path: Path,
+        output_path: Path,
+        options: dict[str, Any] | None = None,
+    ) -> Path:
         """把文案和参考音频发送给外部服务，并把返回的 wav 保存到本地。"""
         clean_text = text.strip()
         if not clean_text:
@@ -32,6 +39,11 @@ class IndexTTSApiTTS(BaseTTS):
                 )
             }
             data = {"text": clean_text}
+            # 只透传后端真实支持的参数，避免前端展示“假开关”。
+            for key, value in (options or {}).items():
+                if value is not None and value != "":
+                    data[key] = str(value)
+
             response = requests.post(
                 synthesize_url,
                 data=data,

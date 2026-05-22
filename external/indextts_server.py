@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import random
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -11,10 +12,23 @@ from uuid import uuid4
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
+from modules.render.ffmpeg_utils import run_ffmpeg
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_ROOT = PROJECT_ROOT / "data" / "indextts_server" / "outputs"
 DEFAULT_MAX_TEXT_LENGTH = 1000
+
+SUPPORTED_TTS_OPTIONS = {
+    "speed": True,
+    "volume_gain_db": True,
+    "seed": True,
+    "emotion": False,
+    "temperature": True,
+    "top_p": True,
+    "top_k": True,
+    "repetition_penalty": True,
+}
 
 
 @dataclass
@@ -39,6 +53,19 @@ class ModelState:
     version: str = "unknown"
     model_loaded: bool = False
     error: str | None = None
+
+
+@dataclass
+class SynthesisOptions:
+    """前端可调整且当前包装服务已真实接通的推理/音频参数。"""
+
+    speed: float = 1.0
+    volume_gain_db: float = 0.0
+    seed: int | None = None
+    temperature: float = 0.8
+    top_p: float = 0.8
+    top_k: int = 30
+    repetition_penalty: float = 10.0
 
 
 model_state = ModelState()
@@ -106,23 +133,131 @@ def load_indextts_v1(config: IndexTTSRuntimeConfig) -> object:
     )
 
 
-def infer_v2(tts_model: object, voice_path: Path, text: str, output_path: Path) -> None:
+def parse_optional_seed(value: str | None) -> int | None:
+    """把表单里的 seed 字符串转为整数；空值代表使用随机结果。"""
+    if value is None or value.strip() == "":
+        return None
+    try:
+        seed = int(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="seed 必须是整数") from exc
+    if seed < 0 or seed > 2**32 - 1:
+        raise HTTPException(status_code=400, detail="seed 必须在 0 到 4294967295 之间")
+    return seed
+
+
+def validate_range(name: str, value: float, minimum: float, maximum: float) -> float:
+    """限制前端传入参数范围，避免把异常值直接送进模型。"""
+    if value < minimum or value > maximum:
+        raise HTTPException(status_code=400, detail=f"{name} 必须在 {minimum} 到 {maximum} 之间")
+    return value
+
+
+def build_synthesis_options(
+    speed: float,
+    volume_gain_db: float,
+    seed: str | None,
+    temperature: float,
+    top_p: float,
+    top_k: int,
+    repetition_penalty: float,
+) -> SynthesisOptions:
+    """构造并校验可真实生效的 TTS 参数。"""
+    return SynthesisOptions(
+        speed=validate_range("speed", float(speed), 0.75, 1.5),
+        volume_gain_db=validate_range("volume_gain_db", float(volume_gain_db), -12.0, 12.0),
+        seed=parse_optional_seed(seed),
+        temperature=validate_range("temperature", float(temperature), 0.1, 2.0),
+        top_p=validate_range("top_p", float(top_p), 0.1, 1.0),
+        top_k=int(validate_range("top_k", int(top_k), 1, 100)),
+        repetition_penalty=validate_range("repetition_penalty", float(repetition_penalty), 1.0, 20.0),
+    )
+
+
+def set_inference_seed(seed: int | None) -> None:
+    """设置 Python / NumPy / Torch 随机种子，让同参数下结果尽量可复现。"""
+    if seed is None:
+        return
+
+    random.seed(seed)
+    try:
+        import numpy as np
+
+        np.random.seed(seed)
+    except Exception:
+        pass
+
+    try:
+        import torch
+
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+    except Exception:
+        pass
+
+
+def generation_kwargs(options: SynthesisOptions) -> dict:
+    """转换为 IndexTTS v1/v2 infer 支持的采样参数。"""
+    return {
+        "temperature": options.temperature,
+        "top_p": options.top_p,
+        "top_k": options.top_k,
+        "repetition_penalty": options.repetition_penalty,
+    }
+
+
+def infer_v2(tts_model: object, voice_path: Path, text: str, output_path: Path, options: SynthesisOptions) -> None:
     """调用 IndexTTS v2 推理接口。"""
     tts_model.infer(
         spk_audio_prompt=str(voice_path),
         text=text,
         output_path=str(output_path),
         verbose=True,
+        **generation_kwargs(options),
     )
 
 
-def infer_v1(tts_model: object, voice_path: Path, text: str, output_path: Path) -> None:
+def infer_v1(tts_model: object, voice_path: Path, text: str, output_path: Path, options: SynthesisOptions) -> None:
     """调用旧版 IndexTTS 推理接口。"""
     tts_model.infer(
         str(voice_path),
         text,
         str(output_path),
+        verbose=True,
+        **generation_kwargs(options),
     )
+
+
+def postprocess_audio(output_path: Path, options: SynthesisOptions) -> None:
+    """用 ffmpeg 对生成结果做语速和音量增益后处理。"""
+    filters: list[str] = []
+    if abs(options.speed - 1.0) > 0.001:
+        filters.append(f"atempo={options.speed:.4f}")
+    if abs(options.volume_gain_db) > 0.001:
+        filters.append(f"volume={options.volume_gain_db:.2f}dB")
+    if not filters:
+        return
+
+    temp_path = output_path.with_name("output_postprocessed.wav")
+    run_ffmpeg(
+        [
+            "-i",
+            output_path,
+            "-vn",
+            "-filter:a",
+            ",".join(filters),
+            "-acodec",
+            "pcm_s16le",
+            "-ar",
+            "44100",
+            "-ac",
+            "2",
+            temp_path,
+        ]
+    )
+    output_path.unlink(missing_ok=True)
+    temp_path.replace(output_path)
 
 
 def load_model_from_config(config: IndexTTSRuntimeConfig) -> tuple[object, str]:
@@ -168,12 +303,12 @@ def load_model_once() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """FastAPI 生命周期：启动时加载模型，进程退出时交给 Python 回收资源。"""
+    """FastAPI 生命周期：启动时加载模型，退出时交给 Python 回收资源。"""
     load_model_once()
     yield
 
 
-app = FastAPI(title="IndexTTS API Server", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="IndexTTS API Server", version="0.2.0", lifespan=lifespan)
 
 
 async def save_upload_file(upload_file: UploadFile, output_path: Path) -> Path:
@@ -190,11 +325,12 @@ async def save_upload_file(upload_file: UploadFile, output_path: Path) -> Path:
 
 @app.get("/health")
 def health() -> dict:
-    """返回模型加载状态。"""
+    """返回模型加载状态和当前包装服务支持的参数。"""
     payload = {
         "status": "ok",
         "model_loaded": model_state.model_loaded,
         "version": model_state.version,
+        "supported_tts_options": SUPPORTED_TTS_OPTIONS,
     }
     if model_state.error:
         payload["error"] = model_state.error
@@ -202,8 +338,18 @@ def health() -> dict:
 
 
 @app.post("/synthesize")
-async def synthesize(text: str = Form(...), voice: UploadFile = File(...)) -> FileResponse:
-    """接收文案和参考音频，返回 IndexTTS 生成的 wav 文件。"""
+async def synthesize(
+    text: str = Form(...),
+    voice: UploadFile = File(...),
+    speed: float = Form(1.0),
+    volume_gain_db: float = Form(0.0),
+    seed: str | None = Form(None),
+    temperature: float = Form(0.8),
+    top_p: float = Form(0.8),
+    top_k: int = Form(30),
+    repetition_penalty: float = Form(10.0),
+) -> FileResponse:
+    """接收文案、参考音频和推理参数，返回 IndexTTS 生成的 wav 文件。"""
     config = load_runtime_config()
     clean_text = text.strip()
     if not clean_text:
@@ -219,6 +365,16 @@ async def synthesize(text: str = Form(...), voice: UploadFile = File(...)) -> Fi
             detail = f"{detail}：{model_state.error}"
         raise HTTPException(status_code=503, detail=detail)
 
+    options = build_synthesis_options(
+        speed=speed,
+        volume_gain_db=volume_gain_db,
+        seed=seed,
+        temperature=temperature,
+        top_p=top_p,
+        top_k=top_k,
+        repetition_penalty=repetition_penalty,
+    )
+
     task_id = uuid4().hex
     task_dir = OUTPUT_ROOT / task_id
     voice_suffix = Path(voice.filename or "").suffix.lower() or ".wav"
@@ -232,12 +388,14 @@ async def synthesize(text: str = Form(...), voice: UploadFile = File(...)) -> Fi
 
         # 多数 TTS 模型不是为并发推理设计的，这里先串行化，避免显存互相踩踏。
         with inference_lock:
+            set_inference_seed(options.seed)
             if model_state.version == "v2":
-                infer_v2(model_state.model, voice_path, clean_text, output_path)
+                infer_v2(model_state.model, voice_path, clean_text, output_path, options)
             elif model_state.version == "v1":
-                infer_v1(model_state.model, voice_path, clean_text, output_path)
+                infer_v1(model_state.model, voice_path, clean_text, output_path, options)
             else:
                 raise RuntimeError("未知 IndexTTS 版本，无法推理")
+            postprocess_audio(output_path, options)
 
         if not output_path.exists() or output_path.stat().st_size == 0:
             raise RuntimeError("IndexTTS 未生成有效 wav 文件")

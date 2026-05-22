@@ -1,8 +1,14 @@
-from pathlib import Path
+from __future__ import annotations
 
+import shutil
+from pathlib import Path
+from typing import Any
+
+import requests
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from modules.core.config import load_config
 from modules.core.paths import PROJECT_ROOT, ensure_runtime_dirs, resolve_project_path
@@ -19,7 +25,7 @@ from modules.tts.factory import get_tts_engine
 settings = load_config()
 ensure_runtime_dirs(settings.paths)
 
-app = FastAPI(title="tts-video", version="0.2.0")
+app = FastAPI(title="tts-video", version="0.3.0")
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "static"), name="static")
 
 
@@ -29,12 +35,44 @@ ASPECT_RATIO_SIZES = {
     "1:1": (1080, 1080),
 }
 
-SUBTITLE_STYLES = {"white_black", "yellow_black", "bilibili_large"}
+SUBTITLE_STYLES = {
+    "white_black": "白字黑边",
+    "yellow_black": "黄字黑边",
+    "bilibili_large": "B站大字风格",
+}
+
+# 这些参数已经在 external/indextts_server.py 中真实接通。
+INDEXTTS_SUPPORTED_OPTIONS = {
+    "speed": True,
+    "volume_gain_db": True,
+    "seed": True,
+    "emotion": False,
+    "temperature": True,
+    "top_p": True,
+    "top_k": True,
+    "repetition_penalty": True,
+}
+
+MOCK_SUPPORTED_OPTIONS = {
+    "speed": False,
+    "volume_gain_db": False,
+    "seed": False,
+    "emotion": False,
+    "temperature": False,
+    "top_p": False,
+    "top_k": False,
+    "repetition_penalty": False,
+}
+
+
+class SubtitlePreviewRequest(BaseModel):
+    script: str
+    max_cjk_chars: int | None = None
 
 
 @app.get("/")
 def index() -> FileResponse:
-    """返回前端首页。"""
+    """返回前端页面。"""
     return FileResponse(PROJECT_ROOT / "static" / "index.html")
 
 
@@ -55,6 +93,155 @@ def get_upload_suffix(upload_file: UploadFile) -> str:
     return Path(upload_file.filename or "").suffix.lower()
 
 
+def get_tts_backend() -> str:
+    """读取当前主程序使用的 TTS 后端。"""
+    return settings.tts.backend.strip().lower()
+
+
+def get_indextts_health(timeout: float = 2.0) -> dict[str, Any]:
+    """探测外部 IndexTTS API 服务状态。"""
+    backend = get_tts_backend()
+    api_url = settings.tts.indextts_api_url.rstrip("/")
+    if backend != "indextts_api":
+        return {
+            "url": api_url,
+            "available": False,
+            "model_loaded": False,
+            "version": "unused",
+            "error": "当前 TTS 后端不是 indextts_api",
+        }
+
+    try:
+        response = requests.get(f"{api_url}/health", timeout=timeout)
+        response.raise_for_status()
+        payload = response.json()
+        return {
+            "url": api_url,
+            "available": bool(payload.get("model_loaded")),
+            "model_loaded": bool(payload.get("model_loaded")),
+            "version": payload.get("version", "unknown"),
+            "error": payload.get("error"),
+            "supported_tts_options": payload.get("supported_tts_options"),
+        }
+    except Exception as exc:
+        return {
+            "url": api_url,
+            "available": False,
+            "model_loaded": False,
+            "version": "unknown",
+            "error": str(exc),
+        }
+
+
+def supported_tts_options() -> dict[str, bool]:
+    """告诉前端哪些 TTS 参数可以展示为可用控件。"""
+    if get_tts_backend() != "indextts_api":
+        return MOCK_SUPPORTED_OPTIONS
+
+    health = get_indextts_health(timeout=1.5)
+    external_options = health.get("supported_tts_options")
+    if isinstance(external_options, dict):
+        return {**INDEXTTS_SUPPORTED_OPTIONS, **external_options}
+    return INDEXTTS_SUPPORTED_OPTIONS
+
+
+def parse_optional_seed(value: str | None) -> int | None:
+    """把表单里的随机种子转成整数；空值代表不固定种子。"""
+    if value is None or value.strip() == "":
+        return None
+    try:
+        seed = int(value)
+    except ValueError as exc:
+        raise ValueError("随机种子必须是整数") from exc
+    if seed < 0 or seed > 2**32 - 1:
+        raise ValueError("随机种子必须在 0 到 4294967295 之间")
+    return seed
+
+
+def validate_range(name: str, value: float, minimum: float, maximum: float) -> float:
+    """校验前端传入的数值范围。"""
+    if value < minimum or value > maximum:
+        raise ValueError(f"{name} 必须在 {minimum} 到 {maximum} 之间")
+    return value
+
+
+def build_tts_options(
+    speed: float,
+    volume_gain_db: float,
+    seed: str | None,
+    temperature: float,
+    top_p: float,
+    top_k: int,
+    repetition_penalty: float,
+) -> dict[str, Any]:
+    """构造传给 TTS 后端的参数；mock 模式下保持空参数。"""
+    if get_tts_backend() != "indextts_api":
+        return {}
+
+    return {
+        "speed": validate_range("语速", float(speed), 0.75, 1.5),
+        "volume_gain_db": validate_range("音量增益", float(volume_gain_db), -12.0, 12.0),
+        "seed": parse_optional_seed(seed),
+        "temperature": validate_range("temperature", float(temperature), 0.1, 2.0),
+        "top_p": validate_range("top_p", float(top_p), 0.1, 1.0),
+        "top_k": int(validate_range("top_k", int(top_k), 1, 100)),
+        "repetition_penalty": validate_range("repetition_penalty", float(repetition_penalty), 1.0, 20.0),
+    }
+
+
+def subtitle_preview(script: str, max_cjk_chars: int | None = None) -> list[str]:
+    """复用后端分句逻辑生成字幕预览。"""
+    clean_script = script.strip()
+    if not clean_script:
+        return []
+    return split_script_to_sentences(
+        clean_script,
+        max_cjk_chars=max_cjk_chars or settings.subtitle.max_chars_per_line_cjk,
+    )
+
+
+@app.get("/api/config")
+def api_config() -> dict:
+    """返回前端初始化所需配置。"""
+    backend = get_tts_backend()
+    indextts_health = get_indextts_health(timeout=1.5)
+    return {
+        "tts_backend": backend,
+        "indextts_available": indextts_health["available"],
+        "indextts_api": indextts_health,
+        "supported_tts_options": supported_tts_options(),
+        "aspect_ratios": [
+            {"value": key, "label": f"{key}（{width}x{height}）", "width": width, "height": height}
+            for key, (width, height) in ASPECT_RATIO_SIZES.items()
+        ],
+        "default_aspect_ratio": settings.video.default_aspect_ratio,
+        "subtitle_styles": [
+            {"value": key, "label": label}
+            for key, label in SUBTITLE_STYLES.items()
+        ],
+        "default_subtitle_style": settings.subtitle.default_style,
+        "default_max_chars_per_line": settings.subtitle.max_chars_per_line_cjk,
+        "max_script_chars": 1000,
+    }
+
+
+@app.get("/api/health")
+def api_health() -> dict:
+    """返回主程序和外部 TTS 服务状态。"""
+    return {
+        "app_status": "ok",
+        "tts_backend": get_tts_backend(),
+        "indextts_api": get_indextts_health(timeout=1.5),
+    }
+
+
+@app.post("/api/preview_subtitle")
+def preview_subtitle(payload: SubtitlePreviewRequest) -> dict:
+    """给前端提供与后端一致的字幕分句预览。"""
+    lines = subtitle_preview(payload.script, payload.max_cjk_chars)
+    return {"lines": lines, "count": len(lines)}
+
+
 @app.post("/api/generate")
 async def generate_video(
     image: UploadFile = File(...),
@@ -62,6 +249,15 @@ async def generate_video(
     script: str = Form(...),
     aspect_ratio: str = Form(settings.video.default_aspect_ratio),
     subtitle_style: str = Form(settings.subtitle.default_style),
+    subtitle_enabled: bool = Form(True),
+    subtitle_max_chars: int = Form(settings.subtitle.max_chars_per_line_cjk),
+    tts_speed: float = Form(1.0),
+    tts_volume_gain_db: float = Form(0.0),
+    tts_seed: str | None = Form(None),
+    tts_temperature: float = Form(0.8),
+    tts_top_p: float = Form(0.8),
+    tts_top_k: int = Form(30),
+    tts_repetition_penalty: float = Form(10.0),
 ) -> dict:
     """执行生成流程：参考音频 -> TTS 输出 -> 字幕 -> 静态图视频 -> final.mp4。"""
     task = create_task()
@@ -77,6 +273,19 @@ async def generate_video(
 
         if subtitle_style not in SUBTITLE_STYLES:
             raise ValueError(f"不支持的字幕样式：{subtitle_style}")
+
+        if subtitle_max_chars < 8 or subtitle_max_chars > 36:
+            raise ValueError("每行最大字数必须在 8 到 36 之间")
+
+        tts_options = build_tts_options(
+            speed=tts_speed,
+            volume_gain_db=tts_volume_gain_db,
+            seed=tts_seed,
+            temperature=tts_temperature,
+            top_p=tts_top_p,
+            top_k=tts_top_k,
+            repetition_penalty=tts_repetition_penalty,
+        )
 
         width, height = ASPECT_RATIO_SIZES[aspect_ratio]
         uploads_root = resolve_project_path(settings.paths.uploads_dir)
@@ -103,20 +312,15 @@ async def generate_video(
         validate_image_file(image_path)
         reference_audio_path = ensure_wav_or_supported_audio(reference_audio_path)
 
-        # 图片预处理和 TTS 输出都放在 cache 中，uploads 只保留用户原始素材。
         processed_image_path = task_cache_dir / "processed.png"
         prepare_canvas_image(image_path, processed_image_path, width, height)
 
-        # audio 现在是参考音频；真正进入视频的是 TTS 后端生成的 generated.wav。
         tts_engine = get_tts_engine(settings)
         generated_audio_path = task_cache_dir / "generated.wav"
-        tts_engine.synthesize(clean_script, reference_audio_path, generated_audio_path)
+        tts_engine.synthesize(clean_script, reference_audio_path, generated_audio_path, options=tts_options)
         audio_duration = get_audio_duration(generated_audio_path)
 
-        sentences = split_script_to_sentences(
-            clean_script,
-            max_cjk_chars=settings.subtitle.max_chars_per_line_cjk,
-        )
+        sentences = subtitle_preview(clean_script, subtitle_max_chars)
         if not sentences:
             raise ValueError("文案无法切分出有效字幕")
 
@@ -150,11 +354,21 @@ async def generate_video(
             crf=settings.video.crf,
             audio_bitrate=settings.video.audio_bitrate,
         )
-        burn_subtitles(temp_video_path, ass_path, final_video_path, crf=settings.video.crf)
+        if subtitle_enabled:
+            burn_subtitles(temp_video_path, ass_path, final_video_path, crf=settings.video.crf)
+        else:
+            shutil.copyfile(temp_video_path, final_video_path)
 
         video_url = f"/api/download/{task_id}"
         mark_task_success(task_id, video_url=video_url)
-        return {"task_id": task_id, "status": "success", "video_url": video_url}
+        return {
+            "task_id": task_id,
+            "status": "success",
+            "video_url": video_url,
+            "audio_backend": get_tts_backend(),
+            "subtitle_preview": sentences,
+            "message": "生成成功",
+        }
 
     except ValueError as exc:
         mark_task_failed(task_id, str(exc))

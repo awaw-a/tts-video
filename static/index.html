@@ -3,72 +3,211 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>tts-video</title>
-    <link rel="stylesheet" href="/static/style.css" />
+    <title>静态角色口播视频生成器</title>
+    <link rel="stylesheet" href="/static/style.css?v=20260523-subtitle-compact" />
   </head>
   <body>
     <main class="app-shell">
-      <section class="workspace">
-        <header class="topbar">
-          <div>
-            <h1>静态角色口播视频生成器</h1>
-            <p>图片 + 参考音频 + 文案 -> MP4</p>
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">tts-video</p>
+          <h1>静态角色口播视频生成器</h1>
+          <p class="subtitle">角色图片 + 参考音频 + 文案 → 字幕 → MP4</p>
+        </div>
+        <div class="status-cluster" aria-live="polite">
+          <span id="backendBadge" class="badge">TTS: loading</span>
+          <span id="connectionBadge" class="badge muted">IndexTTS: 检查中</span>
+        </div>
+      </header>
+
+      <form id="generateForm" class="dashboard">
+        <section class="card materials-card">
+          <div class="card-head compact-head">
+            <div>
+              <h2>素材上传与预览</h2>
+              <p>在选择文件的位置直接预览素材，减少来回确认。</p>
+            </div>
           </div>
-        </header>
 
-        <form id="generateForm" class="panel">
-          <div class="field-grid">
-            <label class="field">
-              <span>角色图片</span>
-              <input id="image" name="image" type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" required />
-            </label>
+          <div class="material-grid">
+            <div class="material-panel image-panel">
+              <div class="material-topline">
+                <div>
+                  <span class="label-title">角色图片</span>
+                  <p id="imageFileName" class="file-name">未选择文件</p>
+                </div>
+                <input id="imageInput" name="image" type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" required />
+              </div>
 
-            <label class="field">
-              <span>上传参考音频 / 测试音频</span>
-              <input id="audio" name="audio" type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" required />
-            </label>
+              <div class="preview-label-row">
+                <span>视频画面预览</span>
+                <span id="previewRatioBadge">16:9</span>
+              </div>
+              <div id="videoPreviewFrame" class="video-preview-frame ratio-16-9">
+                <div id="previewBg" class="preview-bg" aria-hidden="true" hidden></div>
+                <img id="imagePreview" class="preview-foreground" alt="角色图片预览" hidden />
+                <div id="subtitleOverlay" class="preview-subtitle style-yellow-black" hidden>字幕效果预览</div>
+                <div id="imagePlaceholder" class="preview-placeholder">上传角色图片后在这里预览最终画面</div>
+              </div>
+            </div>
+
+            <div class="material-panel audio-panel">
+              <div class="material-topline">
+                <div>
+                  <span class="label-title">参考音频 / 测试音频</span>
+                  <p id="audioFileName" class="file-name">未选择文件</p>
+                </div>
+                <input id="audioInput" name="audio" type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" required />
+              </div>
+
+              <div id="audioPlaceholder" class="placeholder compact">选择音频后在这里播放预览</div>
+              <div id="audioPreviewWrap" class="audio-wrap" hidden>
+                <p id="audioPreviewName" class="preview-name"></p>
+                <audio id="audioPreview" controls></audio>
+              </div>
+
+              <div class="small-note">
+                mock 模式下会直接使用该音频；IndexTTS 模式下会把它作为音色参考。
+              </div>
+            </div>
           </div>
+        </section>
 
-          <label class="field">
-            <span>文案</span>
-            <textarea id="script" name="script" rows="9" placeholder="请输入要显示为字幕的文案" required></textarea>
-          </label>
+        <section class="card script-card">
+          <div class="card-head inline-head">
+            <div>
+              <h2>文案</h2>
+              <p>输入后会实时更新字幕拆分和画面字幕预览。</p>
+            </div>
+            <button id="clearScriptButton" class="ghost-button" type="button">清空</button>
+          </div>
+          <textarea id="scriptInput" name="script" rows="8" maxlength="1000" placeholder="输入要生成语音和字幕的文案。" required></textarea>
+          <div class="meta-row">
+            <span id="scriptHint">建议控制在 1000 字以内。</span>
+            <span id="charCount">0 / 1000</span>
+          </div>
+        </section>
 
-          <div class="field-grid">
+        <section class="card settings-card">
+          <div class="card-head compact-head">
+            <h2>视频与字幕</h2>
+          </div>
+          <div class="form-grid">
             <label class="field">
               <span>视频比例</span>
-              <select id="aspect_ratio" name="aspect_ratio">
-                <option value="16:9" selected>16:9 - 1920x1080</option>
-                <option value="9:16">9:16 - 1080x1920</option>
-                <option value="1:1">1:1 - 1080x1080</option>
+              <select id="aspectRatio" name="aspect_ratio">
+                <option value="16:9">16:9（1920x1080）</option>
+                <option value="9:16">9:16（1080x1920）</option>
+                <option value="1:1">1:1（1080x1080）</option>
               </select>
             </label>
-
+            <label class="field">
+              <span>FPS</span>
+              <input value="30" disabled />
+            </label>
             <label class="field">
               <span>字幕样式</span>
-              <select id="subtitle_style" name="subtitle_style">
+              <select id="subtitleStyle" name="subtitle_style">
                 <option value="white_black">white_black</option>
-                <option value="yellow_black" selected>yellow_black</option>
+                <option value="yellow_black">yellow_black</option>
                 <option value="bilibili_large">bilibili_large</option>
               </select>
             </label>
+            <label class="field">
+              <span>每行最大字数 <b id="subtitleMaxCharsValue">18</b></span>
+              <input id="subtitleMaxChars" name="subtitle_max_chars" type="range" min="8" max="36" step="1" value="18" />
+            </label>
           </div>
-
-          <div class="actions">
-            <button id="submitButton" type="submit">生成视频</button>
-            <span id="statusText" class="status-text">等待上传</span>
-          </div>
-        </form>
-
-        <section id="resultPanel" class="panel result-panel" hidden>
-          <h2>生成结果</h2>
-          <p id="taskText"></p>
-          <a id="downloadLink" class="download-link" href="#" download>下载 MP4</a>
+          <label class="switch-row">
+            <input id="subtitleEnabled" name="subtitle_enabled" type="checkbox" checked />
+            <span>烧录字幕</span>
+          </label>
         </section>
-      </section>
+
+        <section class="card tts-card">
+          <div class="card-head compact-head">
+            <div>
+              <h2>语音设置</h2>
+              <p id="ttsModeText">正在读取 TTS 后端。</p>
+            </div>
+          </div>
+
+          <div id="mockNotice" class="notice" hidden>
+            当前为 mock 模式，上传音频将直接作为最终音频使用。
+          </div>
+
+          <div id="ttsControls" class="tts-controls" hidden>
+            <div class="form-grid">
+              <label class="field" data-option="speed">
+                <span>语速 <b id="speedValue">1.00x</b></span>
+                <input id="ttsSpeed" name="tts_speed" type="range" min="0.75" max="1.5" step="0.05" value="1" />
+              </label>
+              <label class="field" data-option="volume_gain_db">
+                <span>音量增益 <b id="volumeValue">0 dB</b></span>
+                <input id="ttsVolumeGain" name="tts_volume_gain_db" type="range" min="-12" max="12" step="1" value="0" />
+              </label>
+            </div>
+            <label class="field" data-option="seed">
+              <span>随机种子</span>
+              <input id="ttsSeed" name="tts_seed" type="number" min="0" max="4294967295" placeholder="留空表示随机" />
+            </label>
+
+            <details class="advanced-box">
+              <summary>高级采样参数</summary>
+              <div class="form-grid advanced-grid">
+                <label class="field" data-option="temperature">
+                  <span>temperature <b id="temperatureValue">0.8</b></span>
+                  <input id="ttsTemperature" name="tts_temperature" type="range" min="0.1" max="2" step="0.05" value="0.8" />
+                </label>
+                <label class="field" data-option="top_p">
+                  <span>top_p <b id="topPValue">0.8</b></span>
+                  <input id="ttsTopP" name="tts_top_p" type="range" min="0.1" max="1" step="0.05" value="0.8" />
+                </label>
+                <label class="field" data-option="top_k">
+                  <span>top_k</span>
+                  <input id="ttsTopK" name="tts_top_k" type="number" min="1" max="100" value="30" />
+                </label>
+                <label class="field" data-option="repetition_penalty">
+                  <span>repetition_penalty</span>
+                  <input id="ttsRepetitionPenalty" name="tts_repetition_penalty" type="number" min="1" max="20" step="0.1" value="10" />
+                </label>
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="card subtitle-card">
+          <div class="card-head compact-head">
+            <h2>字幕预览</h2>
+            <p id="subtitleCount">0 行</p>
+          </div>
+          <ol id="subtitleList" class="subtitle-list">
+            <li class="empty-line">输入文案后显示字幕拆分。</li>
+          </ol>
+        </section>
+
+        <section id="resultCard" class="card result-card">
+          <div class="card-head compact-head">
+            <h2>生成结果</h2>
+          </div>
+          <div id="resultPlaceholder" class="placeholder result-empty">生成完成后将在这里预览 MP4</div>
+          <div id="resultContent" class="result-content" hidden>
+            <video id="resultVideo" class="result-video" controls playsinline></video>
+            <div class="result-meta result-actions">
+              <p id="taskInfo"></p>
+              <a id="downloadLink" class="primary-link" href="#" download>下载 MP4</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="card action-card">
+          <button id="submitButton" class="primary-button" type="submit">生成视频</button>
+          <button id="resetButton" class="secondary-button" type="button">重置表单</button>
+          <p id="statusText" class="status-text">等待输入素材。</p>
+        </section>
+      </form>
     </main>
 
-    <script src="/static/main.js"></script>
+    <script src="/static/main.js?v=20260523-subtitle-compact"></script>
   </body>
 </html>
-
