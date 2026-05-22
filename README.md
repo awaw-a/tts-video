@@ -51,9 +51,13 @@ Windows PowerShell:
 pip install -r requirements.txt
 ```
 
-## 安装 ffmpeg
+## ffmpeg 说明
 
-本项目使用 ffmpeg 命令行合成视频、读取部分音频格式和烧录字幕。请先安装 ffmpeg，并确保 `ffmpeg`、`ffprobe` 已加入 PATH。优先推荐安装包含 libass 的 ffmpeg；如果当前 ffmpeg 没有 `ass` 字幕滤镜，程序会自动使用 Pillow 预渲染字幕图片作为兜底方案。
+本项目使用 ffmpeg 命令行合成视频、读取部分音频格式和烧录字幕。Windows 版已内置 `third_party/ffmpeg/windows/bin/ffmpeg.exe` 和 `ffprobe.exe`，正常情况下不需要用户额外安装 ffmpeg。
+
+内置版本来自 gyan.dev 的 Windows release essentials 静态构建，包含本项目需要的 libx264、AAC、libass 等能力。程序会优先使用项目内置 ffmpeg；如果内置文件不存在，则回退查找系统 PATH 中的 `ffmpeg`。
+
+macOS / Linux 暂未内置二进制文件，需要自行安装 ffmpeg：
 
 macOS:
 
@@ -68,11 +72,7 @@ sudo apt update
 sudo apt install ffmpeg
 ```
 
-Windows:
-
-1. 从 https://ffmpeg.org/download.html 下载 ffmpeg。
-2. 解压后将 `bin` 目录加入系统 PATH。
-3. 打开新终端执行 `ffmpeg -version` 验证。
+如需更新 Windows 内置 ffmpeg，可从 https://www.gyan.dev/ffmpeg/builds/ 下载 `ffmpeg-release-essentials.zip`，并替换 `third_party/ffmpeg/windows/bin/` 下的 `ffmpeg.exe` 和 `ffprobe.exe`。
 
 ## 启动
 
@@ -100,7 +100,7 @@ http://127.0.0.1:8000
 
 ### 找不到 ffmpeg
 
-如果接口返回“未找到 ffmpeg”，说明系统没有安装 ffmpeg，或 ffmpeg 不在 PATH 中。安装后请重新打开终端，再启动服务。
+如果接口返回“未找到 ffmpeg”，请先确认 `third_party/ffmpeg/windows/bin/ffmpeg.exe` 是否存在。非 Windows 系统需要自行安装 ffmpeg，并确保 `ffmpeg`、`ffprobe` 在 PATH 中。
 
 ### 字幕乱码
 

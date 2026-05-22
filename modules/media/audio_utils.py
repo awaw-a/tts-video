@@ -1,6 +1,8 @@
 import wave
 from pathlib import Path
 
+from modules.render.ffmpeg_utils import ensure_project_ffmpeg_on_path, resolve_ffmpeg_tool
+
 
 SUPPORTED_AUDIO_SUFFIXES = {".wav", ".mp3", ".m4a"}
 
@@ -35,15 +37,15 @@ def get_audio_duration(audio_path: Path) -> float:
         if audio_path.suffix.lower() == ".wav":
             duration = get_wav_duration(audio_path)
         else:
-            # pydub 依赖 ffmpeg/ffprobe 读取 mp3/m4a，按需导入可减少启动噪声。
+            # pydub 依赖 ffmpeg/ffprobe；先把项目内置版本加入当前进程 PATH。
+            ensure_project_ffmpeg_on_path()
             from pydub import AudioSegment
 
+            AudioSegment.converter = resolve_ffmpeg_tool("ffmpeg")
             audio = AudioSegment.from_file(audio_path)
             duration = len(audio) / 1000.0
     except Exception as exc:
-        raise RuntimeError(
-            "无法读取音频时长，请确认音频文件有效，并已安装 ffmpeg/ffprobe"
-        ) from exc
+        raise RuntimeError("无法读取音频时长，请确认音频文件有效，并且 ffmpeg/ffprobe 可用") from exc
 
     if duration <= 0:
         raise ValueError("音频时长必须大于 0")

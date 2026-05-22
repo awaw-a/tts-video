@@ -1,0 +1,18 @@
+FFmpeg Windows bundled binary
+
+Source:
+https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+
+Downloaded package:
+ffmpeg-8.1.1-essentials_build
+
+Downloaded on:
+2026-05-22
+
+SHA256:
+6f58ce889f59c311410f7d2b18895b33c03456463486f3b1ebc93d97a0f54541
+
+Notes:
+This build is provided by gyan.dev and contains ffmpeg.exe, ffprobe.exe, and ffplay.exe.
+Only ffmpeg.exe and ffprobe.exe are bundled here because this project does not use ffplay.
+See README.txt and licenses/LICENSE for upstream build notes and license details.
