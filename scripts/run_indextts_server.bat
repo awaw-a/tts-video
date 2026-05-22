@@ -16,8 +16,6 @@ set TRANSFORMERS_OFFLINE=1
 
 if exist ".venv310\Scripts\python.exe" (
   ".venv310\Scripts\python.exe" -m uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
-) else if exist ".venv\Scripts\python.exe" (
-  ".venv\Scripts\python.exe" -m uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
 ) else (
   python -m uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
 )

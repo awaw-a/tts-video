@@ -31,19 +31,19 @@
 主程序建议使用 Python 3.10 或更高版本。若要在同一环境中运行 IndexTTS，建议使用 Python 3.10；IndexTTS 的部分依赖不支持 Python 3.14。
 
 ```bash
-python -m venv .venv
+python -m venv .venv310
 ```
 
 macOS / Linux:
 
 ```bash
-source .venv/bin/activate
+source .venv310/bin/activate
 ```
 
 Windows PowerShell:
 
 ```powershell
-.venv\Scripts\Activate.ps1
+.venv310\Scripts\Activate.ps1
 ```
 
 安装依赖：
