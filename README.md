@@ -50,7 +50,7 @@ install.bat
 install.bat -SkipModels
 ```
 
-手动安装时，主程序建议使用 Python 3.10 或更高版本。若要在同一环境中运行 IndexTTS，建议使用 Python 3.10；IndexTTS 的部分依赖不支持 Python 3.14。
+手动安装时，主 WebUI 可使用 Python 3.10 或更高版本；若要在同一环境中完整运行默认的 IndexTTS 链路，推荐使用 Python 3.10。Windows 一键安装脚本也会优先创建 `.venv310`，因为 IndexTTS 的部分依赖对更高版本 Python 兼容性较差。
 
 ```bash
 python -m venv .venv310
@@ -127,15 +127,29 @@ IndexTTS 准备方式：
 
 本仓库将依赖拆成两层：`requirements.txt` 是主 WebUI 基础依赖，`requirements-indextts.txt` 是 IndexTTS / GPU / AI 推理依赖。Windows + NVIDIA 环境安装 `requirements-indextts.txt` 时会下载 PyTorch CUDA 12.8 轮子，体积较大，建议预留 10GB 以上磁盘空间。
 
-如果你希望把 IndexTTS 放在兄弟目录，也可以启动服务前设置：
+一键脚本默认使用项目内的 `tts-video/index-tts`。如果你希望把 IndexTTS 放在兄弟目录，请不要直接使用默认一键脚本启动 IndexTTS；可以手动设置环境变量后运行服务，或按需修改 `scripts/service_common.ps1` / `scripts/run_indextts_server.*` 中的路径。
+
+手动启动兄弟目录 IndexTTS 示例。
+
+Linux / Mac:
 
 ```bash
 export INDEXTTS_REPO="../index-tts"
 export INDEXTTS_MODEL_DIR="../index-tts/checkpoints"
 export INDEXTTS_CFG_PATH="../index-tts/checkpoints/config.yaml"
+uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
 ```
 
-启动 IndexTTS API 服务：
+Windows PowerShell:
+
+```powershell
+$env:INDEXTTS_REPO = "..\index-tts"
+$env:INDEXTTS_MODEL_DIR = "..\index-tts\checkpoints"
+$env:INDEXTTS_CFG_PATH = "..\index-tts\checkpoints\config.yaml"
+uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
+```
+
+如果使用默认的项目内 `tts-video/index-tts`，可以直接启动 IndexTTS API 服务：
 
 Windows:
 
@@ -173,7 +187,7 @@ tts:
   split_by_sentence: false
 ```
 
-启动主程序：
+确认 IndexTTS API 服务已经启动且 `/health` 返回 `model_loaded: true` 后，再启动主程序：
 
 ```bash
 uvicorn app:app --reload
@@ -219,7 +233,7 @@ Windows 一键启动完整链路（IndexTTS API + tts-video 主程序）：
 start_all.bat
 ```
 
-脚本会在后台启动 IndexTTS API 和 WebUI，不再为每个服务单独弹出窗口。它会等待 `http://127.0.0.1:9000/health` 返回 `model_loaded: true`，再启动 `http://127.0.0.1:8000` 并自动打开浏览器。主控制窗口会实时显示 WebUI / IndexTTS 的合并日志；运行中按 `Q` 可以安全停止服务并退出。若检测到旧服务已经占用 8000/9000 端口但没有 PID 文件，脚本会询问是否停止旧进程并重新接管。
+脚本会在后台启动 IndexTTS API 和 WebUI，不再为每个服务单独弹出窗口。它会等待 `http://127.0.0.1:9000/health` 返回 `model_loaded: true`，再启动 `http://127.0.0.1:8000` 并自动打开浏览器。主控制窗口会实时显示 WebUI / IndexTTS 的合并日志；运行中按 `Q` 或 `Ctrl+C` 可以安全停止服务并退出。若检测到 8000/9000 端口已被非 `runtime/*.pid` 记录的程序占用，脚本会报错并提示手动关闭或修改端口，不会自动结束未知进程。
 
 运行时文件位置：
 
@@ -233,7 +247,7 @@ start_all.bat
 start_debug.bat
 ```
 
-该模式会打开独立的 WebUI 和 IndexTTS 控制台窗口，方便分别观察原始输出；调试窗口通常手动关闭。
+该模式会打开独立的 WebUI 和 IndexTTS 控制台窗口，方便分别观察原始输出；它同样会写入 `runtime/*.pid`，可以用 `stop_all.bat` 统一停止，也可以手动关闭调试窗口。
 
 Windows 一键关闭服务：
 
@@ -241,9 +255,9 @@ Windows 一键关闭服务：
 stop_all.bat
 ```
 
-它会优先读取 `runtime/*.pid` 中记录的 PID，只关闭由本项目启动脚本创建的 tts-video / IndexTTS 进程；如果 PID 文件不存在但端口仍被占用，脚本会列出占用进程并询问是否停止，不会无确认地强制结束无关进程。
+它只读取 `runtime/*.pid` 中记录的 PID，并只关闭这些 PID 对应的 tts-video / IndexTTS 进程；如果 PID 文件不存在但端口仍被占用，脚本只会提示占用 PID，不会询问或强制结束无关进程。
 
-手动启动主程序：
+手动启动主程序时，默认 `indextts_api` 模式需要先启动 IndexTTS API 服务：
 
 ```bash
 uvicorn app:app --reload
