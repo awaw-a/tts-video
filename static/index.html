@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>静态角色口播视频生成器</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260523-ratio-43-34" />
+    <link rel="stylesheet" href="/static/style.css?v=20260523-background-style" />
   </head>
   <body>
     <main class="app-shell">
@@ -43,7 +43,7 @@
                 <span>视频画面预览</span>
                 <span id="previewRatioBadge">16:9</span>
               </div>
-              <div id="videoPreviewFrame" class="video-preview-frame ratio-16-9">
+              <div id="videoPreviewFrame" class="video-preview-frame ratio-16-9 bg-blur">
                 <div id="previewBg" class="preview-bg" aria-hidden="true" hidden></div>
                 <img id="imagePreview" class="preview-foreground" alt="角色图片预览" hidden />
                 <div id="subtitleOverlay" class="preview-subtitle style-yellow-black" hidden>字幕效果预览</div>
@@ -106,6 +106,17 @@
             <label class="field">
               <span>FPS</span>
               <input value="30" disabled />
+            </label>
+            <label class="field">
+              <span>背景样式</span>
+              <select id="backgroundStyle" name="background_style">
+                <option value="blur">图片模糊填充</option>
+                <option value="white">纯白</option>
+                <option value="red">纯红</option>
+                <option value="blue">纯蓝</option>
+                <option value="gradient_blue">渐变蓝</option>
+                <option value="gradient_red">渐变红</option>
+              </select>
             </label>
             <label class="field">
               <span>字幕样式</span>
@@ -210,6 +221,6 @@
       </form>
     </main>
 
-    <script src="/static/main.js?v=20260523-ratio-43-34"></script>
+    <script src="/static/main.js?v=20260523-background-style"></script>
   </body>
 </html>

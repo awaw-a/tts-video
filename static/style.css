@@ -453,6 +453,30 @@ input[type="range"] {
   background: #f3f4f6;
 }
 
+.video-preview-frame.bg-blur {
+  background: #f3f4f6;
+}
+
+.video-preview-frame.bg-white {
+  background: #fff;
+}
+
+.video-preview-frame.bg-red {
+  background: #f00;
+}
+
+.video-preview-frame.bg-blue {
+  background: #00f;
+}
+
+.video-preview-frame.bg-gradient-blue {
+  background: linear-gradient(135deg, #dbeafe 0%, #60a5fa 46%, #1d4ed8 100%);
+}
+
+.video-preview-frame.bg-gradient-red {
+  background: linear-gradient(135deg, #fee2e2 0%, #fb7185 46%, #dc2626 100%);
+}
+
 .video-preview-frame.ratio-16-9 {
   width: min(100%, 660px);
   aspect-ratio: 16 / 9;
@@ -497,8 +521,12 @@ input[type="range"] {
   position: absolute;
   inset: 0;
   z-index: 1;
-  background: rgba(15, 23, 42, 0.18);
+  background: transparent;
   pointer-events: none;
+}
+
+.video-preview-frame.bg-blur::after {
+  background: rgba(15, 23, 42, 0.18);
 }
 
 .preview-bg {

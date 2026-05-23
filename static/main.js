@@ -28,6 +28,7 @@ const refs = {
   charCount: document.querySelector("#charCount"),
   clearScriptButton: document.querySelector("#clearScriptButton"),
   aspectRatio: document.querySelector("#aspectRatio"),
+  backgroundStyle: document.querySelector("#backgroundStyle"),
   subtitleStyle: document.querySelector("#subtitleStyle"),
   subtitleEnabled: document.querySelector("#subtitleEnabled"),
   subtitleMaxChars: document.querySelector("#subtitleMaxChars"),
@@ -103,7 +104,9 @@ function renderConfig() {
   }
 
   renderAspectOptions(config.aspect_ratios || []);
+  renderSelectOptions(refs.backgroundStyle, config.background_styles || []);
   refs.aspectRatio.value = config.default_aspect_ratio || "16:9";
+  refs.backgroundStyle.value = config.default_background_style || "blur";
   refs.subtitleStyle.value = config.default_subtitle_style || "yellow_black";
   refs.subtitleMaxChars.value = config.default_max_chars_per_line || 18;
 
@@ -111,16 +114,20 @@ function renderConfig() {
   updateAllPreviews();
 }
 
-function renderAspectOptions(aspectRatios) {
-  if (!aspectRatios.length) return;
+function renderSelectOptions(selectElement, options) {
+  if (!selectElement || !options.length) return;
 
-  refs.aspectRatio.innerHTML = "";
-  aspectRatios.forEach((ratio) => {
+  selectElement.innerHTML = "";
+  options.forEach((item) => {
     const option = document.createElement("option");
-    option.value = ratio.value;
-    option.textContent = ratio.label;
-    refs.aspectRatio.appendChild(option);
+    option.value = item.value;
+    option.textContent = item.label;
+    selectElement.appendChild(option);
   });
+}
+
+function renderAspectOptions(aspectRatios) {
+  renderSelectOptions(refs.aspectRatio, aspectRatios);
 }
 
 function applySupportedTtsOptions(options) {
@@ -149,6 +156,7 @@ function updateFilePreview(input, kind) {
       refs.subtitleOverlay.hidden = true;
       refs.imagePlaceholder.hidden = false;
       refs.imagePlaceholder.textContent = "上传角色图片后在这里预览最终画面";
+      updateBackgroundPreview();
       return;
     }
     state.imageUrl = URL.createObjectURL(file);
@@ -165,6 +173,7 @@ function updateFilePreview(input, kind) {
       refs.imagePreview.hidden = false;
       refs.imagePlaceholder.hidden = true;
       refs.videoPreviewFrame.classList.add("preview-ready");
+      updateBackgroundPreview();
       updateSubtitleStyle();
     };
     refs.imagePreview.onerror = () => {
@@ -175,6 +184,7 @@ function updateFilePreview(input, kind) {
       refs.subtitleOverlay.hidden = true;
       refs.imagePlaceholder.hidden = false;
       refs.imagePlaceholder.textContent = "图片预览失败，请确认文件格式为 png / jpg / jpeg / webp。";
+      updateBackgroundPreview();
     };
     refs.imagePreview.src = state.imageUrl;
   }
@@ -279,6 +289,18 @@ function updateAspectPreview() {
   refs.previewRatioBadge.textContent = refs.aspectRatio.value;
 }
 
+function updateBackgroundPreview() {
+  const style = refs.backgroundStyle?.value || "blur";
+  const bgClasses = ["bg-blur", "bg-white", "bg-red", "bg-blue", "bg-gradient-blue", "bg-gradient-red"];
+  refs.videoPreviewFrame.classList.remove(...bgClasses);
+  refs.videoPreviewFrame.classList.add(`bg-${style.replace("_", "-")}`);
+
+  const hasLoadedImage = refs.videoPreviewFrame.classList.contains("preview-ready") && Boolean(state.imageUrl);
+  const shouldUseBlurImage = style === "blur" && hasLoadedImage;
+  refs.previewBg.hidden = !shouldUseBlurImage;
+  refs.previewBg.style.backgroundImage = state.imageUrl ? `url("${state.imageUrl}")` : "";
+}
+
 function updateCharCount() {
   const count = refs.scriptInput.value.length;
   refs.charCount.textContent = `${count} / 1000`;
@@ -299,6 +321,7 @@ function updateAllPreviews() {
   updateSubtitlePreview();
   updateSubtitleStyle();
   updateAspectPreview();
+  updateBackgroundPreview();
 }
 
 function startStageTicker() {
@@ -378,6 +401,7 @@ async function submitGenerate(event) {
 function resetForm() {
   refs.form.reset();
   refs.aspectRatio.value = state.config?.default_aspect_ratio || "16:9";
+  refs.backgroundStyle.value = state.config?.default_background_style || "blur";
   refs.subtitleStyle.value = state.config?.default_subtitle_style || "yellow_black";
   refs.subtitleMaxChars.value = state.config?.default_max_chars_per_line || 18;
   updateFilePreview(refs.imageInput, "image");
@@ -396,6 +420,7 @@ function bindEvents() {
     updateAllPreviews();
   });
   refs.aspectRatio.addEventListener("change", updateAspectPreview);
+  refs.backgroundStyle.addEventListener("change", updateBackgroundPreview);
   refs.subtitleStyle.addEventListener("change", updateSubtitleStyle);
   refs.subtitleEnabled.addEventListener("change", updateSubtitleStyle);
   refs.subtitleMaxChars.addEventListener("input", updateAllPreviews);

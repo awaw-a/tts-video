@@ -31,7 +31,7 @@ def create_static_video(
             audio_path,
             "-vf",
             f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1",
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p",
             "-c:v",
             "libx264",
             "-tune",

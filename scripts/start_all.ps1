@@ -9,6 +9,7 @@ $WebOutLog = Join-Path $script:LogDir "webui.log"
 $WebErrLog = Join-Path $script:LogDir "webui.err.log"
 $IndexOutLog = Join-Path $script:LogDir "indextts.log"
 $IndexErrLog = Join-Path $script:LogDir "indextts.err.log"
+$ControllerPidFile = Join-Path $script:RuntimeDir "start_all.pid"
 $script:LogOffsets = @{}
 
 function Ensure-LogFile {
@@ -81,6 +82,41 @@ function Show-AllNewLogs {
     Show-NewLogLines -Path $IndexErrLog -Prefix "[IndexTTS:ERR]"
 }
 
+function Stop-PreviousControllerIfRunning {
+    $pidValue = Read-PidFile -PidFile $ControllerPidFile
+    if ($null -eq $pidValue) {
+        return
+    }
+
+    if ($pidValue -eq $PID) {
+        return
+    }
+
+    if (-not (Test-ProcessAlive -PidValue $pidValue)) {
+        Remove-Item -LiteralPath $ControllerPidFile -Force -ErrorAction SilentlyContinue
+        return
+    }
+
+    Write-Host "[0/4] Previous start_all console detected. Closing controller PID $pidValue..."
+    & taskkill.exe /PID $pidValue /F | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to close previous start_all controller PID $pidValue."
+    }
+    Remove-Item -LiteralPath $ControllerPidFile -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
+
+function Register-CurrentController {
+    Set-Content -LiteralPath $ControllerPidFile -Value $PID -Encoding ASCII
+}
+
+function Clear-CurrentControllerPid {
+    $pidValue = Read-PidFile -PidFile $ControllerPidFile
+    if ($pidValue -eq $PID) {
+        Remove-Item -LiteralPath $ControllerPidFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Start-HiddenService {
     param(
         [string]$Name,
@@ -109,6 +145,48 @@ function Start-HiddenService {
 
     Set-Content -LiteralPath $PidFile -Value $process.Id -Encoding ASCII
     Write-Host "  $Name PID: $($process.Id)"
+}
+
+function Stop-TrackedServiceIfRunning {
+    param([string]$Name, [string]$PidFile)
+
+    $pidValue = Read-PidFile -PidFile $PidFile
+    if ($null -eq $pidValue) {
+        return $false
+    }
+
+    if (-not (Test-ProcessAlive -PidValue $pidValue)) {
+        Write-Host "[INFO] $Name PID $pidValue has exited. Removing stale PID file."
+        Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+
+    Write-Host "[0/4] Existing $Name detected from PID file. Stopping PID $pidValue before restart..."
+    & taskkill.exe /PID $pidValue /T /F | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to stop existing $Name PID $pidValue. Please run stop_all.bat or close it manually."
+    }
+
+    Remove-Item -LiteralPath $PidFile -Force -ErrorAction SilentlyContinue
+    Write-Host "[OK] Existing $Name stopped."
+    return $true
+}
+
+function Restart-TrackedProjectServices {
+    $hadWebPid = $null -ne (Read-PidFile -PidFile $script:WebPidFile)
+    $hadIndexPid = $null -ne (Read-PidFile -PidFile $script:IndexPidFile)
+
+    if (-not $hadWebPid -and -not $hadIndexPid) {
+        return
+    }
+
+    Write-Host "[0/4] Runtime PID files found. start_all.bat will restart tracked project services."
+    $stoppedWeb = Stop-TrackedServiceIfRunning -Name "WebUI" -PidFile $script:WebPidFile
+    $stoppedIndex = Stop-TrackedServiceIfRunning -Name "IndexTTS API" -PidFile $script:IndexPidFile
+
+    if ($stoppedWeb -or $stoppedIndex) {
+        Start-Sleep -Seconds 2
+    }
 }
 
 function Start-Or-ReuseIndexTts {
@@ -184,6 +262,7 @@ function Watch-Console {
         Write-Host ""
         Write-Host "Stopping services..."
         & (Join-Path $PSScriptRoot "stop_all.ps1")
+        Clear-CurrentControllerPid
     }
 }
 
@@ -197,10 +276,15 @@ try {
     Write-Host "Runtime: $script:RuntimeDir"
     Write-Host ""
 
+    Stop-PreviousControllerIfRunning
+    Register-CurrentController
+
     Ensure-LogFile -Path $WebOutLog
     Ensure-LogFile -Path $WebErrLog
     Ensure-LogFile -Path $IndexOutLog
     Ensure-LogFile -Path $IndexErrLog
+
+    Restart-TrackedProjectServices
 
     Start-Or-ReuseIndexTts
 
@@ -233,5 +317,6 @@ catch {
     Write-Host "  $WebErrLog"
     Write-Host "  $IndexOutLog"
     Write-Host "  $IndexErrLog"
+    Clear-CurrentControllerPid
     exit 1
 }

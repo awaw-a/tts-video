@@ -16,7 +16,7 @@ from modules.core.config import load_config
 from modules.core.paths import PROJECT_ROOT, ensure_runtime_dirs, resolve_project_path
 from modules.core.task import create_task, get_task, mark_task_failed, mark_task_success
 from modules.media.audio_utils import ensure_wav_or_supported_audio, get_audio_duration
-from modules.media.image_utils import prepare_canvas_image, validate_image_file
+from modules.media.image_utils import SUPPORTED_BACKGROUND_STYLES, prepare_canvas_image, validate_image_file
 from modules.render.image_video import burn_subtitles, create_static_video
 from modules.subtitle.ass_generator import generate_ass
 from modules.subtitle.splitter import split_script_to_sentences
@@ -50,6 +50,15 @@ SUBTITLE_STYLES = {
     "white_black": "白字黑边",
     "yellow_black": "黄字黑边",
     "bilibili_large": "B站大字风格",
+}
+
+BACKGROUND_STYLES = {
+    "blur": "图片模糊填充",
+    "white": "纯白",
+    "red": "纯红",
+    "blue": "纯蓝",
+    "gradient_blue": "渐变蓝",
+    "gradient_red": "渐变红",
 }
 
 # 这些参数已经在 external/indextts_server.py 中真实接通。
@@ -229,6 +238,11 @@ def api_config() -> dict:
             for key, (width, height) in ASPECT_RATIO_SIZES.items()
         ],
         "default_aspect_ratio": settings.video.default_aspect_ratio,
+        "background_styles": [
+            {"value": key, "label": label}
+            for key, label in BACKGROUND_STYLES.items()
+        ],
+        "default_background_style": "blur",
         "subtitle_styles": [
             {"value": key, "label": label}
             for key, label in SUBTITLE_STYLES.items()
@@ -262,6 +276,7 @@ async def generate_video(
     audio: UploadFile = File(...),
     script: str = Form(...),
     aspect_ratio: str = Form(settings.video.default_aspect_ratio),
+    background_style: str = Form("blur"),
     subtitle_style: str = Form(settings.subtitle.default_style),
     subtitle_enabled: bool = Form(True),
     subtitle_max_chars: int = Form(settings.subtitle.max_chars_per_line_cjk),
@@ -277,10 +292,11 @@ async def generate_video(
     task = create_task()
     task_id = task.task_id
     logger.info(
-        "Task %s received generate request: backend=%s, ratio=%s, subtitle_style=%s",
+        "Task %s received generate request: backend=%s, ratio=%s, background=%s, subtitle_style=%s",
         task_id,
         get_tts_backend(),
         aspect_ratio,
+        background_style,
         subtitle_style,
     )
 
@@ -291,6 +307,9 @@ async def generate_video(
 
         if aspect_ratio not in ASPECT_RATIO_SIZES:
             raise ValueError(f"不支持的视频比例：{aspect_ratio}")
+
+        if background_style not in SUPPORTED_BACKGROUND_STYLES:
+            raise ValueError(f"不支持的背景样式：{background_style}")
 
         if subtitle_style not in SUBTITLE_STYLES:
             raise ValueError(f"不支持的字幕样式：{subtitle_style}")
@@ -342,8 +361,8 @@ async def generate_video(
         logger.info("Task %s media validation complete", task_id)
 
         processed_image_path = task_cache_dir / "processed.png"
-        prepare_canvas_image(image_path, processed_image_path, width, height)
-        logger.info("Task %s image prepared: %sx%s", task_id, width, height)
+        prepare_canvas_image(image_path, processed_image_path, width, height, background_style=background_style)
+        logger.info("Task %s image prepared: %sx%s background=%s", task_id, width, height, background_style)
 
         tts_engine = get_tts_engine(settings)
         generated_audio_path = task_cache_dir / "generated.wav"
