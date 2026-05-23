@@ -300,3 +300,17 @@ ASS 字幕默认使用 Arial 或系统字体回退。如果中文显示异常，
 ## 声音克隆合规提醒
 
 后续接入音色克隆功能时，只应使用本人或已获得授权的参考音频。请勿在未授权情况下克隆、模仿或传播他人声音。
+
+## 许可证与第三方组件
+
+本项目自身源码采用 MIT License，详见根目录 `LICENSE`。MIT License 仅覆盖本仓库中由项目作者编写的 Python、HTML、CSS、JavaScript、脚本和配置文件，不覆盖第三方模型、第三方二进制文件、Python 依赖、用户上传素材或生成内容。
+
+更完整的第三方许可说明见 `THIRD_PARTY_NOTICES.md`。
+
+主要许可边界如下：
+
+- `tts-video` 自身源码：MIT License。
+- IndexTTS / IndexTTS2 / checkpoints：遵循上游 bilibili Model Use License Agreement，不属于本项目 MIT 授权范围。默认 `indextts_api` 模式只是通过外部 API 调用 IndexTTS，用户需要自行遵守 IndexTTS 上游协议、模型协议和声音克隆合规要求。
+- FFmpeg：Windows 预置/下载的 gyan.dev static build 按 GPLv3 授权。若发布包含 `ffmpeg.exe` / `ffprobe.exe` 的离线包，需要同时附带 GPLv3 文本、来源、版本、构建信息和对应源码链接。
+- Python 依赖：遵循各自上游许可证。如果分发完整虚拟环境、wheel 或运行时包，应额外附带对应依赖的许可清单。
+- 用户素材和生成视频：由用户自行负责权利来源、授权和合规使用。本项目不授予用户克隆未授权声音、使用第三方素材或制作误导性内容的权利。
