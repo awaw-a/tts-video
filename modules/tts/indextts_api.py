@@ -1,9 +1,12 @@
 from pathlib import Path
 from typing import Any
+import logging
 
 import requests
 
 from modules.tts.base import BaseTTS
+
+logger = logging.getLogger("tts_video")
 
 
 class IndexTTSApiTTS(BaseTTS):
@@ -29,6 +32,7 @@ class IndexTTSApiTTS(BaseTTS):
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         synthesize_url = f"{self.api_url}/synthesize"
+        logger.info("Calling IndexTTS API: url=%s, text_chars=%s", synthesize_url, len(clean_text))
 
         with voice_ref_path.open("rb") as voice_file:
             files = {
@@ -53,13 +57,19 @@ class IndexTTSApiTTS(BaseTTS):
 
         if response.status_code != 200:
             error_text = response.text.strip() or response.reason
+            logger.error("IndexTTS API failed: status=%s, error=%s", response.status_code, error_text[:500])
             raise RuntimeError(f"IndexTTS API 调用失败：HTTP {response.status_code}，{error_text}")
 
+        logger.info("IndexTTS API response received: status=%s, bytes=%s", response.status_code, len(response.content))
+
         if not response.content:
+            logger.error("IndexTTS API returned empty audio content")
             raise RuntimeError("IndexTTS API 返回了空音频内容")
 
         output_path.write_bytes(response.content)
         if output_path.stat().st_size == 0:
+            logger.error("IndexTTS generated audio file is empty: %s", output_path)
             raise RuntimeError("IndexTTS 生成的音频文件为空")
 
+        logger.info("IndexTTS API audio saved: %s bytes", output_path.stat().st_size)
         return output_path

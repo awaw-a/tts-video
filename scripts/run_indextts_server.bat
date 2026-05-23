@@ -13,9 +13,11 @@ set INDEXTTS_USE_DEEPSPEED=false
 set HF_HUB_CACHE=index-tts\checkpoints\hf_cache
 set HF_HUB_OFFLINE=1
 set TRANSFORMERS_OFFLINE=1
+set PYTHONUNBUFFERED=1
+set PYTHONIOENCODING=utf-8
 
 if exist ".venv310\Scripts\python.exe" (
-  ".venv310\Scripts\python.exe" -m uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
+  ".venv310\Scripts\python.exe" -u -m uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
 ) else (
-  python -m uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
+  python -u -m uvicorn external.indextts_server:app --host 127.0.0.1 --port 9000
 )

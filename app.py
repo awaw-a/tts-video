@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import shutil
+import logging
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,13 @@ from modules.tts.factory import get_tts_engine
 
 settings = load_config()
 ensure_runtime_dirs(settings.paths)
+logger = logging.getLogger("tts_video")
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+logger.propagate = False
 
 app = FastAPI(title="tts-video", version="0.3.0")
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "static"), name="static")
@@ -262,6 +271,13 @@ async def generate_video(
     """执行生成流程：参考音频 -> TTS 输出 -> 字幕 -> 静态图视频 -> final.mp4。"""
     task = create_task()
     task_id = task.task_id
+    logger.info(
+        "Task %s received generate request: backend=%s, ratio=%s, subtitle_style=%s",
+        task_id,
+        get_tts_backend(),
+        aspect_ratio,
+        subtitle_style,
+    )
 
     try:
         clean_script = script.strip()
@@ -308,17 +324,28 @@ async def generate_video(
         await save_upload_file(image, image_path)
         await save_upload_file(audio, reference_audio_path)
         script_path.write_text(clean_script, encoding="utf-8")
+        logger.info(
+            "Task %s uploaded files saved: image=%s, audio=%s, script_chars=%s",
+            task_id,
+            image_path.name,
+            reference_audio_path.name,
+            len(clean_script),
+        )
 
         validate_image_file(image_path)
         reference_audio_path = ensure_wav_or_supported_audio(reference_audio_path)
+        logger.info("Task %s media validation complete", task_id)
 
         processed_image_path = task_cache_dir / "processed.png"
         prepare_canvas_image(image_path, processed_image_path, width, height)
+        logger.info("Task %s image prepared: %sx%s", task_id, width, height)
 
         tts_engine = get_tts_engine(settings)
         generated_audio_path = task_cache_dir / "generated.wav"
+        logger.info("Task %s starting TTS synthesis with backend=%s", task_id, get_tts_backend())
         tts_engine.synthesize(clean_script, reference_audio_path, generated_audio_path, options=tts_options)
         audio_duration = get_audio_duration(generated_audio_path)
+        logger.info("Task %s TTS finished: duration=%.2fs", task_id, audio_duration)
 
         sentences = subtitle_preview(clean_script, subtitle_max_chars)
         if not sentences:
@@ -326,6 +353,8 @@ async def generate_video(
 
         srt_path = task_output_dir / "subtitle.srt"
         ass_path = task_output_dir / "subtitle.ass"
+        logger.info("Task %s subtitle split complete: %s lines", task_id, len(sentences))
+        logger.info("Task %s generating subtitle files", task_id)
         generate_srt(
             sentences,
             audio_duration,
@@ -344,6 +373,7 @@ async def generate_video(
 
         temp_video_path = task_cache_dir / "temp_video.mp4"
         final_video_path = task_output_dir / "final.mp4"
+        logger.info("Task %s starting static video render", task_id)
         create_static_video(
             processed_image_path,
             generated_audio_path,
@@ -355,12 +385,15 @@ async def generate_video(
             audio_bitrate=settings.video.audio_bitrate,
         )
         if subtitle_enabled:
+            logger.info("Task %s burning subtitles with ffmpeg", task_id)
             burn_subtitles(temp_video_path, ass_path, final_video_path, crf=settings.video.crf)
         else:
+            logger.info("Task %s subtitle burn disabled; copying temp video", task_id)
             shutil.copyfile(temp_video_path, final_video_path)
 
         video_url = f"/api/download/{task_id}"
         mark_task_success(task_id, video_url=video_url)
+        logger.info("Task %s completed successfully: %s", task_id, final_video_path)
         return {
             "task_id": task_id,
             "status": "success",
@@ -372,9 +405,11 @@ async def generate_video(
 
     except ValueError as exc:
         mark_task_failed(task_id, str(exc))
+        logger.warning("Task %s failed with validation error: %s", task_id, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         mark_task_failed(task_id, str(exc))
+        logger.exception("Task %s failed with unexpected error", task_id)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

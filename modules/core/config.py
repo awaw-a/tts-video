@@ -47,9 +47,9 @@ class SubtitleConfig:
 
 @dataclass
 class TTSConfig:
-    """TTS 后端配置；默认使用 mock，避免缺少外部服务时无法启动。"""
+    """TTS 后端配置；默认使用外部 IndexTTS API，mock 仅作为开发备用。"""
 
-    backend: str = "mock"
+    backend: str = "indextts_api"
     indextts_api_url: str = "http://127.0.0.1:9000"
     request_timeout: int = 600
     split_by_sentence: bool = False

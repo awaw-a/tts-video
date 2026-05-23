@@ -4,7 +4,7 @@
 
 角色图片 + 音频 + 文案 -> 字幕文件 -> 静态图视频 -> 烧录字幕 -> MP4。
 
-当前默认使用 mock TTS：直接复用上传音频，方便开发测试。也可以切换为 `indextts_api`，通过外部 IndexTTS API 服务根据参考音频和文案生成克隆语音。
+当前默认使用 `indextts_api`：主 WebUI 会调用外部 IndexTTS API 服务，根据参考音频和文案生成克隆语音。`mock` 后端仍保留，但只作为开发调试或无模型环境下的备用模式。
 
 ## 当前功能
 
@@ -15,7 +15,7 @@
 - 支持 white_black、yellow_black、bilibili_large 三种 ASS 字幕样式。
 - 使用 ffmpeg 合成静态图片视频并烧录字幕。
 - 输出 `data/outputs/{task_id}/final.mp4`。
-- 支持两种 TTS 后端：`mock` 和 `indextts_api`。
+- 默认使用 `indextts_api` TTS 后端；`mock` 仅用于开发调试。
 
 ## 后续计划
 
@@ -37,13 +37,14 @@ install.bat
 脚本会自动完成：
 
 - 创建 `.venv310` 虚拟环境。
-- 安装 `requirements.txt` 中的主程序和 IndexTTS 运行依赖。
+- 安装 `requirements.txt` 中的主 WebUI 依赖。
+- 安装 `requirements-indextts.txt` 中的 IndexTTS / GPU / AI 推理依赖。
 - 下载 Windows 版 ffmpeg 到 `third_party/ffmpeg/windows/bin/`。
 - 克隆 `index-tts` 外部仓库。
 - 下载 IndexTTS-2 checkpoints 和运行时依赖模型。
 - 修补 IndexTTS 的 Hugging Face 缓存路径，使其使用项目内的 `index-tts/checkpoints/hf_cache`。
 
-如果只想安装代码依赖、暂时不下载模型，可以运行：
+如果暂时不下载模型，只完成依赖、ffmpeg 和仓库准备，可以运行：
 
 ```bat
 install.bat -SkipModels
@@ -67,11 +68,19 @@ Windows PowerShell:
 .venv310\Scripts\Activate.ps1
 ```
 
-安装依赖：
+主 WebUI 基础依赖：
 
 ```bash
 pip install -r requirements.txt
 ```
+
+完整运行默认的 `indextts_api` 链路，还需要安装 IndexTTS API 服务依赖：
+
+```bash
+pip install -r requirements-indextts.txt
+```
+
+`requirements.txt` 只包含 FastAPI、Pillow、pydub、requests 等主程序依赖；`requirements-indextts.txt` 包含 torch、torchaudio、transformers、IndexTTS 运行时等较重依赖。拆分后，主 WebUI 和开发调试环境更轻，完整声音克隆链路则需要额外准备 IndexTTS 依赖与模型。
 
 ## ffmpeg 说明
 
@@ -100,8 +109,8 @@ sudo apt install ffmpeg
 
 当前支持两种 TTS 后端：
 
-- `mock`：复制上传音频，适合测试和调试。
-- `indextts_api`：调用外部 IndexTTS 服务，使用参考音频生成克隆语音。
+- `indextts_api`：默认后端，调用外部 IndexTTS 服务，使用参考音频生成克隆语音。
+- `mock`：备用后端，复制上传音频，适合开发调试或无模型环境下验证视频合成流程。
 
 推荐目录结构：
 
@@ -116,7 +125,7 @@ IndexTTS 准备方式：
 2. 按 IndexTTS 官方 README 安装依赖并下载 checkpoints。
 3. 先确认 IndexTTS 自己的 demo 可以生成语音。
 
-本仓库的 `requirements.txt` 已整合 IndexTTS 运行依赖。Windows + NVIDIA 环境会安装 PyTorch CUDA 12.8 轮子，下载体积较大，建议预留 10GB 以上磁盘空间。
+本仓库将依赖拆成两层：`requirements.txt` 是主 WebUI 基础依赖，`requirements-indextts.txt` 是 IndexTTS / GPU / AI 推理依赖。Windows + NVIDIA 环境安装 `requirements-indextts.txt` 时会下载 PyTorch CUDA 12.8 轮子，体积较大，建议预留 10GB 以上磁盘空间。
 
 如果你希望把 IndexTTS 放在兄弟目录，也可以启动服务前设置：
 
@@ -154,7 +163,7 @@ http://127.0.0.1:9000/health
 
 如果模型加载成功，应返回 `model_loaded: true`。
 
-切换到 IndexTTS API 模式，修改 `configs/default.yaml`：
+项目默认已经是 IndexTTS API 模式，`configs/default.yaml` 应保持：
 
 ```yaml
 tts:
@@ -169,6 +178,15 @@ tts:
 ```bash
 uvicorn app:app --reload
 ```
+
+如果只是开发调试 WebUI 或验证视频合成流程，没有准备模型，可以临时把 `configs/default.yaml` 改成：
+
+```yaml
+tts:
+  backend: "mock"
+```
+
+mock 模式会直接把上传音频作为最终音频使用，不会生成克隆语音。
 
 使用方式：
 
@@ -201,7 +219,21 @@ Windows 一键启动完整链路（IndexTTS API + tts-video 主程序）：
 start_all.bat
 ```
 
-脚本会等待 `http://127.0.0.1:9000/health` 返回 `model_loaded: true`，再启动 `http://127.0.0.1:8000` 并打开浏览器。使用期间请保持两个服务窗口打开。
+脚本会在后台启动 IndexTTS API 和 WebUI，不再为每个服务单独弹出窗口。它会等待 `http://127.0.0.1:9000/health` 返回 `model_loaded: true`，再启动 `http://127.0.0.1:8000` 并自动打开浏览器。主控制窗口会实时显示 WebUI / IndexTTS 的合并日志；运行中按 `Q` 可以安全停止服务并退出。若检测到旧服务已经占用 8000/9000 端口但没有 PID 文件，脚本会询问是否停止旧进程并重新接管。
+
+运行时文件位置：
+
+- PID 文件：`runtime/webui.pid`、`runtime/indextts.pid`
+- WebUI 日志：`logs/webui.log`、`logs/webui.err.log`
+- IndexTTS 日志：`logs/indextts.log`、`logs/indextts.err.log`
+
+开发调试模式：
+
+```bat
+start_debug.bat
+```
+
+该模式会打开独立的 WebUI 和 IndexTTS 控制台窗口，方便分别观察原始输出；调试窗口通常手动关闭。
 
 Windows 一键关闭服务：
 
@@ -209,7 +241,7 @@ Windows 一键关闭服务：
 stop_all.bat
 ```
 
-它会关闭监听 8000 和 9000 端口的 tts-video / IndexTTS 服务。
+它会优先读取 `runtime/*.pid` 中记录的 PID，只关闭由本项目启动脚本创建的 tts-video / IndexTTS 进程；如果 PID 文件不存在但端口仍被占用，脚本会列出占用进程并询问是否停止，不会无确认地强制结束无关进程。
 
 手动启动主程序：
 

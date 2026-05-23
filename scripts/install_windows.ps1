@@ -78,6 +78,7 @@ function Install-PythonRequirements {
     Write-Step "Installing Python requirements"
     Invoke-Checked $PythonPath @("-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel")
     Invoke-Checked $PythonPath @("-m", "pip", "install", "-r", "requirements.txt")
+    Invoke-Checked $PythonPath @("-m", "pip", "install", "-r", "requirements-indextts.txt")
     Invoke-Checked $PythonPath @("-m", "pip", "check")
 }
 
@@ -181,7 +182,7 @@ function Download-IndexTTSModels {
     Remove-Item Env:TRANSFORMERS_OFFLINE -ErrorAction SilentlyContinue
 
     if (-not (Test-Path $HfPath)) {
-        throw "hf CLI was not found. requirements.txt may not have installed correctly."
+        throw "hf CLI was not found. requirements-indextts.txt may not have installed correctly."
     }
 
     $mainReady =

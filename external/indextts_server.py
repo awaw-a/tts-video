@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import random
 import sys
+import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,6 +14,14 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from modules.render.ffmpeg_utils import run_ffmpeg
+
+logger = logging.getLogger("indextts_server")
+if not logger.handlers:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+logger.propagate = False
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -287,6 +296,12 @@ def load_model_once() -> None:
     """服务启动时加载一次模型；失败时保留错误信息，方便 /health 排查。"""
     config = load_runtime_config()
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
+    logger.info(
+        "Loading IndexTTS model: version=%s, repo=%s, model_dir=%s",
+        config.version,
+        config.repo,
+        config.model_dir,
+    )
 
     try:
         model, version = load_model_from_config(config)
@@ -294,11 +309,13 @@ def load_model_once() -> None:
         model_state.version = version
         model_state.model_loaded = True
         model_state.error = None
+        logger.info("IndexTTS model loaded successfully: version=%s", version)
     except Exception as exc:
         model_state.model = None
         model_state.version = "unknown"
         model_state.model_loaded = False
         model_state.error = str(exc)
+        logger.exception("IndexTTS model failed to load")
 
 
 @asynccontextmanager
@@ -380,14 +397,24 @@ async def synthesize(
     voice_suffix = Path(voice.filename or "").suffix.lower() or ".wav"
     voice_path = task_dir / f"reference_audio{voice_suffix}"
     output_path = task_dir / "output.wav"
+    logger.info(
+        "Synthesis task %s received: text_chars=%s, version=%s, speed=%.2f, seed=%s",
+        task_id,
+        len(clean_text),
+        model_state.version,
+        options.speed,
+        options.seed,
+    )
 
     try:
         await save_upload_file(voice, voice_path)
+        logger.info("Synthesis task %s reference audio saved: %s bytes", task_id, voice_path.stat().st_size)
         if voice_path.stat().st_size == 0:
             raise HTTPException(status_code=400, detail="参考音频为空")
 
         # 多数 TTS 模型不是为并发推理设计的，这里先串行化，避免显存互相踩踏。
         with inference_lock:
+            logger.info("Synthesis task %s starting IndexTTS inference", task_id)
             set_inference_seed(options.seed)
             if model_state.version == "v2":
                 infer_v2(model_state.model, voice_path, clean_text, output_path, options)
@@ -396,16 +423,20 @@ async def synthesize(
             else:
                 raise RuntimeError("未知 IndexTTS 版本，无法推理")
             postprocess_audio(output_path, options)
+            logger.info("Synthesis task %s inference and audio postprocess finished", task_id)
 
         if not output_path.exists() or output_path.stat().st_size == 0:
             raise RuntimeError("IndexTTS 未生成有效 wav 文件")
 
+        logger.info("Synthesis task %s completed: output_bytes=%s", task_id, output_path.stat().st_size)
         return FileResponse(
             output_path,
             media_type="audio/wav",
             filename="output.wav",
         )
     except HTTPException:
+        logger.warning("Synthesis task %s failed with HTTP error", task_id)
         raise
     except Exception as exc:
+        logger.exception("Synthesis task %s failed", task_id)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
