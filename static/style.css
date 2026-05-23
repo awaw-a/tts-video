@@ -460,10 +460,26 @@ input[type="range"] {
   margin-right: auto;
 }
 
+.video-preview-frame.ratio-4-3 {
+  width: min(100%, 560px);
+  max-height: 420px;
+  aspect-ratio: 4 / 3;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .video-preview-frame.ratio-9-16 {
   width: min(100%, 260px);
   max-height: 470px;
   aspect-ratio: 9 / 16;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.video-preview-frame.ratio-3-4 {
+  width: min(100%, 350px);
+  max-height: 470px;
+  aspect-ratio: 3 / 4;
   margin-left: auto;
   margin-right: auto;
 }
@@ -715,13 +731,23 @@ audio,
     grid-template-columns: 1fr;
   }
 
+  .video-preview-frame.ratio-4-3,
   .video-preview-frame.ratio-9-16,
+  .video-preview-frame.ratio-3-4,
   .video-preview-frame.ratio-1-1 {
     max-height: 420px;
   }
 
+  .video-preview-frame.ratio-4-3 {
+    width: min(100%, 420px);
+  }
+
   .video-preview-frame.ratio-9-16 {
     width: min(100%, 236px);
+  }
+
+  .video-preview-frame.ratio-3-4 {
+    width: min(100%, 315px);
   }
 
   .video-preview-frame.ratio-1-1 {

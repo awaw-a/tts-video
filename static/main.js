@@ -102,12 +102,25 @@ function renderConfig() {
     refs.ttsControls.hidden = true;
   }
 
+  renderAspectOptions(config.aspect_ratios || []);
   refs.aspectRatio.value = config.default_aspect_ratio || "16:9";
   refs.subtitleStyle.value = config.default_subtitle_style || "yellow_black";
   refs.subtitleMaxChars.value = config.default_max_chars_per_line || 18;
 
   applySupportedTtsOptions(config.supported_tts_options || {});
   updateAllPreviews();
+}
+
+function renderAspectOptions(aspectRatios) {
+  if (!aspectRatios.length) return;
+
+  refs.aspectRatio.innerHTML = "";
+  aspectRatios.forEach((ratio) => {
+    const option = document.createElement("option");
+    option.value = ratio.value;
+    option.textContent = ratio.label;
+    refs.aspectRatio.appendChild(option);
+  });
 }
 
 function applySupportedTtsOptions(options) {
@@ -254,10 +267,12 @@ function updateSubtitleStyle() {
 }
 
 function updateAspectPreview() {
-  refs.videoPreviewFrame.classList.remove("ratio-16-9", "ratio-9-16", "ratio-1-1");
+  refs.videoPreviewFrame.classList.remove("ratio-16-9", "ratio-4-3", "ratio-9-16", "ratio-3-4", "ratio-1-1");
   const ratioClass = {
     "16:9": "ratio-16-9",
+    "4:3": "ratio-4-3",
     "9:16": "ratio-9-16",
+    "3:4": "ratio-3-4",
     "1:1": "ratio-1-1",
   }[refs.aspectRatio.value] || "ratio-16-9";
   refs.videoPreviewFrame.classList.add(ratioClass);

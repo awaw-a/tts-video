@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>静态角色口播视频生成器</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260523-subtitle-compact" />
+    <link rel="stylesheet" href="/static/style.css?v=20260523-ratio-43-34" />
   </head>
   <body>
     <main class="app-shell">
@@ -97,7 +97,9 @@
               <span>视频比例</span>
               <select id="aspectRatio" name="aspect_ratio">
                 <option value="16:9">16:9（1920x1080）</option>
+                <option value="4:3">4:3（1440x1080）</option>
                 <option value="9:16">9:16（1080x1920）</option>
+                <option value="3:4">3:4（1080x1440）</option>
                 <option value="1:1">1:1（1080x1080）</option>
               </select>
             </label>
@@ -208,6 +210,6 @@
       </form>
     </main>
 
-    <script src="/static/main.js?v=20260523-subtitle-compact"></script>
+    <script src="/static/main.js?v=20260523-ratio-43-34"></script>
   </body>
 </html>

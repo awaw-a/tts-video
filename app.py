@@ -40,7 +40,9 @@ app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "static"), name="stati
 
 ASPECT_RATIO_SIZES = {
     "16:9": (1920, 1080),
+    "4:3": (1440, 1080),
     "9:16": (1080, 1920),
+    "3:4": (1080, 1440),
     "1:1": (1080, 1080),
 }
 
@@ -82,7 +84,10 @@ class SubtitlePreviewRequest(BaseModel):
 @app.get("/")
 def index() -> FileResponse:
     """返回前端页面。"""
-    return FileResponse(PROJECT_ROOT / "static" / "index.html")
+    return FileResponse(
+        PROJECT_ROOT / "static" / "index.html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 async def save_upload_file(upload_file: UploadFile, output_path: Path) -> Path:

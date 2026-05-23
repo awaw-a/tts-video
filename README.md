@@ -11,7 +11,7 @@
 - 上传 png/jpg/jpeg/webp 角色图片。
 - 上传 wav/mp3/m4a 参考音频 / 测试音频。
 - 输入文案并自动切分字幕。
-- 支持 16:9、9:16、1:1 三种视频比例。
+- 支持 16:9、4:3、9:16、3:4、1:1 五种视频比例。
 - 支持 white_black、yellow_black、bilibili_large 三种 ASS 字幕样式。
 - 使用 ffmpeg 合成静态图片视频并烧录字幕。
 - 输出 `data/outputs/{task_id}/final.mp4`。
