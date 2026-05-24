@@ -7,6 +7,28 @@ from PIL import Image, ImageDraw, ImageFont
 from modules.render.ffmpeg_utils import has_ffmpeg_filter, run_ffmpeg
 
 
+def ffmpeg_low_thread_options() -> list[str]:
+    """限制 ffmpeg 线程数，避免低资源 Windows 设备上 pthread_create 失败。"""
+    return [
+        "-threads",
+        "1",
+        "-filter_threads",
+        "1",
+        "-filter_complex_threads",
+        "1",
+    ]
+
+
+def x264_low_thread_options() -> list[str]:
+    """限制 libx264 内部线程数，降低静态视频合成的系统资源占用。"""
+    return [
+        "-threads:v",
+        "1",
+        "-x264-params",
+        "threads=1",
+    ]
+
+
 def create_static_video(
     image_path: Path,
     audio_path: Path,
@@ -21,6 +43,7 @@ def create_static_video(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     run_ffmpeg(
         [
+            *ffmpeg_low_thread_options(),
             "-loop",
             "1",
             "-framerate",
@@ -34,10 +57,13 @@ def create_static_video(
             f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p",
             "-c:v",
             "libx264",
+            *x264_low_thread_options(),
             "-tune",
             "stillimage",
             "-c:a",
             "aac",
+            "-threads:a",
+            "1",
             "-b:a",
             audio_bitrate,
             "-pix_fmt",
@@ -68,12 +94,14 @@ def burn_subtitles(
     # 使用 cwd + 文件名可以避开 Windows 绝对路径中的冒号和反斜杠转义问题。
     run_ffmpeg(
         [
+            *ffmpeg_low_thread_options(),
             "-i",
             input_video_path,
             "-vf",
             f"ass=filename={subtitle_path.name}",
             "-c:v",
             "libx264",
+            *x264_low_thread_options(),
             "-crf",
             str(crf),
             "-pix_fmt",
@@ -99,7 +127,7 @@ def burn_subtitles_with_pillow_fallback(
     base_frame_path = frames_dir / "base.png"
     concat_path = frames_dir / "concat.txt"
 
-    run_ffmpeg(["-i", input_video_path, "-frames:v", "1", base_frame_path])
+    run_ffmpeg([*ffmpeg_low_thread_options(), "-i", input_video_path, "-frames:v", "1", base_frame_path])
 
     segments = parse_ass_events(subtitle_path)
     style = parse_ass_style(subtitle_path)
@@ -121,6 +149,7 @@ def burn_subtitles_with_pillow_fallback(
     concat_path.write_text(build_concat_file(frame_entries), encoding="utf-8")
     run_ffmpeg(
         [
+            *ffmpeg_low_thread_options(),
             "-f",
             "concat",
             "-safe",
@@ -135,6 +164,7 @@ def burn_subtitles_with_pillow_fallback(
             "1:a:0",
             "-c:v",
             "libx264",
+            *x264_low_thread_options(),
             "-crf",
             str(crf),
             "-pix_fmt",
