@@ -118,6 +118,12 @@ p {
   color: var(--danger);
 }
 
+.badge.warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
 .dashboard {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(460px, 1.1fr);

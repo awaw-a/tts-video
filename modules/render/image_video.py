@@ -29,6 +29,93 @@ def x264_low_thread_options() -> list[str]:
     ]
 
 
+def x264_low_memory_options(crf: int) -> list[str]:
+    """libx264 低内存参数，避免模型常驻时编码阶段申请内存失败。"""
+    return [
+        "-c:v",
+        "libx264",
+        "-threads:v",
+        "1",
+        "-preset",
+        "ultrafast",
+        "-tune",
+        "zerolatency",
+        "-x264-params",
+        "threads=1:lookahead_threads=1:rc-lookahead=0:sync-lookahead=0:ref=1:bframes=0:weightp=0:mbtree=0",
+        "-crf",
+        str(crf),
+        "-pix_fmt",
+        "yuv420p",
+    ]
+
+
+def h264_mf_fallback_options() -> list[str]:
+    """Windows MediaFoundation H.264 兜底编码器，通常比 x264 占用更少内存。"""
+    return [
+        "-c:v",
+        "h264_mf",
+        "-rate_control",
+        "quality",
+        "-quality",
+        "90",
+        "-pix_fmt",
+        "yuv420p",
+    ]
+
+
+def mpeg4_fallback_options() -> list[str]:
+    """最后兜底编码器；兼容性弱于 H.264，但能显著降低内存压力。"""
+    return [
+        "-c:v",
+        "mpeg4",
+        "-threads:v",
+        "1",
+        "-q:v",
+        "3",
+        "-vtag",
+        "mp4v",
+        "-pix_fmt",
+        "yuv420p",
+    ]
+
+
+def should_retry_with_video_encoder_fallback(error: RuntimeError) -> bool:
+    """只在视频编码器/资源不足类错误时切换到更省内存的编码器。"""
+    message = str(error).lower()
+    retry_markers = (
+        "malloc",
+        "pthread_create",
+        "resource temporarily unavailable",
+        "could not open encoder",
+        "error submitting video frame",
+        "error encoding a frame",
+        "generic error in an external library",
+    )
+    return any(marker in message for marker in retry_markers)
+
+
+def run_ffmpeg_with_video_encoder_fallbacks(
+    commands: list[list[object]],
+    cwd: Path | None = None,
+) -> None:
+    """先用低内存 x264，失败时依次尝试 h264_mf 和 mpeg4。"""
+    errors: list[str] = []
+
+    for index, command in enumerate(commands):
+        try:
+            run_ffmpeg(command, cwd=cwd)
+            return
+        except RuntimeError as error:
+            errors.append(str(error))
+            if index == 0 and not should_retry_with_video_encoder_fallback(error):
+                raise
+
+    raise RuntimeError(
+        "ffmpeg 视频编码失败，低内存 H.264 与兜底编码器均未成功。\n\n"
+        + "\n\n--- fallback error ---\n\n".join(errors)
+    )
+
+
 def create_static_video(
     image_path: Path,
     audio_path: Path,
@@ -41,39 +128,37 @@ def create_static_video(
 ) -> Path:
     """用一张静态图片和音频生成临时 MP4 视频。"""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    run_ffmpeg(
+    common_args: list[object] = [
+        *ffmpeg_low_thread_options(),
+        "-loop",
+        "1",
+        "-framerate",
+        str(fps),
+        "-i",
+        image_path,
+        "-i",
+        audio_path,
+        "-vf",
+        f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
+        f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p",
+    ]
+    audio_args: list[object] = [
+        "-c:a",
+        "aac",
+        "-threads:a",
+        "1",
+        "-b:a",
+        audio_bitrate,
+        "-shortest",
+        "-r",
+        str(fps),
+        output_path,
+    ]
+    run_ffmpeg_with_video_encoder_fallbacks(
         [
-            *ffmpeg_low_thread_options(),
-            "-loop",
-            "1",
-            "-framerate",
-            str(fps),
-            "-i",
-            image_path,
-            "-i",
-            audio_path,
-            "-vf",
-            f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p",
-            "-c:v",
-            "libx264",
-            *x264_low_thread_options(),
-            "-tune",
-            "stillimage",
-            "-c:a",
-            "aac",
-            "-threads:a",
-            "1",
-            "-b:a",
-            audio_bitrate,
-            "-pix_fmt",
-            "yuv420p",
-            "-shortest",
-            "-r",
-            str(fps),
-            "-crf",
-            str(crf),
-            output_path,
+            [*common_args, *x264_low_memory_options(crf), *audio_args],
+            [*common_args, *h264_mf_fallback_options(), *audio_args],
+            [*common_args, *mpeg4_fallback_options(), *audio_args],
         ]
     )
     return output_path
@@ -92,23 +177,23 @@ def burn_subtitles(
         return burn_subtitles_with_pillow_fallback(input_video_path, subtitle_path, output_path, crf)
 
     # 使用 cwd + 文件名可以避开 Windows 绝对路径中的冒号和反斜杠转义问题。
-    run_ffmpeg(
+    common_args: list[object] = [
+        *ffmpeg_low_thread_options(),
+        "-i",
+        input_video_path,
+        "-vf",
+        f"ass=filename={subtitle_path.name}",
+    ]
+    audio_args: list[object] = [
+        "-c:a",
+        "copy",
+        output_path,
+    ]
+    run_ffmpeg_with_video_encoder_fallbacks(
         [
-            *ffmpeg_low_thread_options(),
-            "-i",
-            input_video_path,
-            "-vf",
-            f"ass=filename={subtitle_path.name}",
-            "-c:v",
-            "libx264",
-            *x264_low_thread_options(),
-            "-crf",
-            str(crf),
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "copy",
-            output_path,
+            [*common_args, *x264_low_memory_options(crf), *audio_args],
+            [*common_args, *h264_mf_fallback_options(), *audio_args],
+            [*common_args, *mpeg4_fallback_options(), *audio_args],
         ],
         cwd=subtitle_path.parent,
     )
@@ -147,34 +232,34 @@ def burn_subtitles_with_pillow_fallback(
             cursor = end
 
     concat_path.write_text(build_concat_file(frame_entries), encoding="utf-8")
-    run_ffmpeg(
+    common_args: list[object] = [
+        *ffmpeg_low_thread_options(),
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        concat_path,
+        "-i",
+        input_video_path,
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+    ]
+    audio_args: list[object] = [
+        "-r",
+        "30",
+        "-c:a",
+        "copy",
+        "-shortest",
+        output_path,
+    ]
+    run_ffmpeg_with_video_encoder_fallbacks(
         [
-            *ffmpeg_low_thread_options(),
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            concat_path,
-            "-i",
-            input_video_path,
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-c:v",
-            "libx264",
-            *x264_low_thread_options(),
-            "-crf",
-            str(crf),
-            "-pix_fmt",
-            "yuv420p",
-            "-r",
-            "30",
-            "-c:a",
-            "copy",
-            "-shortest",
-            output_path,
+            [*common_args, *x264_low_memory_options(crf), *audio_args],
+            [*common_args, *h264_mf_fallback_options(), *audio_args],
+            [*common_args, *mpeg4_fallback_options(), *audio_args],
         ]
     )
     return output_path

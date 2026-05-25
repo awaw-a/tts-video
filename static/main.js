@@ -3,6 +3,7 @@ const state = {
   imageUrl: null,
   audioUrl: null,
   stageTimer: null,
+  healthTimer: null,
 };
 
 const refs = {
@@ -67,6 +68,73 @@ function setBadge(element, text, kind = "muted") {
   element.className = `badge ${kind}`;
 }
 
+function renderTtsStatus(backend, indexttsHealth = null) {
+  setBadge(refs.backendBadge, `TTS: ${backend}`, backend === "mock" ? "muted" : "ok");
+
+  if (backend === "indextts_api") {
+    const available = Boolean(indexttsHealth?.available || indexttsHealth?.model_loaded || state.config?.indextts_available);
+    setBadge(
+      refs.connectionBadge,
+      available ? "IndexTTS: 已连接" : "IndexTTS: 启动中",
+      available ? "ok" : "warning",
+    );
+    refs.ttsModeText.textContent = available
+      ? "当前为 IndexTTS API 模式，服务已连接。"
+      : "当前为 IndexTTS API 模式，正在等待模型加载完成。";
+    refs.mockNotice.hidden = true;
+    refs.ttsControls.hidden = false;
+  } else {
+    setBadge(refs.connectionBadge, "IndexTTS: 未使用", "muted");
+    refs.ttsModeText.textContent = "当前为 mock 模式。";
+    refs.mockNotice.hidden = false;
+    refs.ttsControls.hidden = true;
+  }
+}
+
+async function refreshTtsHealth() {
+  if (!state.config || state.config.tts_backend !== "indextts_api") {
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/health", { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error("health request failed");
+    }
+
+    const payload = await response.json();
+    const backend = payload.tts_backend || state.config.tts_backend;
+    const indexttsHealth = payload.indextts_api || {};
+    state.config.tts_backend = backend;
+    state.config.indextts_available = Boolean(indexttsHealth.available || indexttsHealth.model_loaded);
+    state.config.indextts_api = indexttsHealth;
+    if (indexttsHealth.supported_tts_options) {
+      state.config.supported_tts_options = {
+        ...(state.config.supported_tts_options || {}),
+        ...indexttsHealth.supported_tts_options,
+      };
+      applySupportedTtsOptions(state.config.supported_tts_options);
+    }
+    renderTtsStatus(backend, indexttsHealth);
+  } catch (error) {
+    renderTtsStatus(state.config.tts_backend, { available: false, error: error.message });
+  }
+}
+
+function startTtsHealthPolling() {
+  if (state.healthTimer) {
+    window.clearInterval(state.healthTimer);
+    state.healthTimer = null;
+  }
+
+  if (!state.config || state.config.tts_backend !== "indextts_api") {
+    return;
+  }
+
+  refreshTtsHealth();
+  state.healthTimer = window.setInterval(refreshTtsHealth, 5000);
+}
+
 async function loadConfig() {
   try {
     const response = await fetch("/api/config");
@@ -75,6 +143,7 @@ async function loadConfig() {
     }
     state.config = await response.json();
     renderConfig();
+    startTtsHealthPolling();
   } catch (error) {
     setBadge(refs.backendBadge, "TTS: unknown", "error");
     setBadge(refs.connectionBadge, "IndexTTS: 未知", "error");
@@ -86,22 +155,7 @@ function renderConfig() {
   const config = state.config;
   const backend = config.tts_backend || "mock";
 
-  setBadge(refs.backendBadge, `TTS: ${backend}`, backend === "mock" ? "muted" : "ok");
-  if (backend === "indextts_api") {
-    setBadge(
-      refs.connectionBadge,
-      config.indextts_available ? "IndexTTS: 已连接" : "IndexTTS: 未连接",
-      config.indextts_available ? "ok" : "error",
-    );
-    refs.ttsModeText.textContent = "当前为 IndexTTS API 模式。";
-    refs.mockNotice.hidden = true;
-    refs.ttsControls.hidden = false;
-  } else {
-    setBadge(refs.connectionBadge, "IndexTTS: 未使用", "muted");
-    refs.ttsModeText.textContent = "当前为 mock 模式。";
-    refs.mockNotice.hidden = false;
-    refs.ttsControls.hidden = true;
-  }
+  renderTtsStatus(backend, config.indextts_api || { available: config.indextts_available });
 
   renderAspectOptions(config.aspect_ratios || []);
   renderSelectOptions(refs.backgroundStyle, config.background_styles || []);
@@ -435,3 +489,9 @@ function bindEvents() {
 bindEvents();
 updateAllPreviews();
 loadConfig();
+
+window.addEventListener("beforeunload", () => {
+  if (state.healthTimer) {
+    window.clearInterval(state.healthTimer);
+  }
+});
