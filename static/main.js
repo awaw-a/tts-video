@@ -73,14 +73,19 @@ function renderTtsStatus(backend, indexttsHealth = null) {
 
   if (backend === "indextts_api") {
     const available = Boolean(indexttsHealth?.available || indexttsHealth?.model_loaded || state.config?.indextts_available);
+    const hasError = !available && Boolean(indexttsHealth?.error || indexttsHealth?.error_code);
     setBadge(
       refs.connectionBadge,
-      available ? "IndexTTS: 已连接" : "IndexTTS: 启动中",
-      available ? "ok" : "warning",
+      available ? "IndexTTS: 已连接" : (hasError ? "IndexTTS: 启动失败" : "IndexTTS: 启动中"),
+      available ? "ok" : (hasError ? "error" : "warning"),
     );
-    refs.ttsModeText.textContent = available
-      ? "当前为 IndexTTS API 模式，服务已连接。"
-      : "当前为 IndexTTS API 模式，正在等待模型加载完成。";
+    if (available) {
+      refs.ttsModeText.textContent = "当前为 IndexTTS API 模式，服务已连接。";
+    } else if (hasError) {
+      refs.ttsModeText.textContent = indexttsHealth?.suggestion || "IndexTTS 模型加载失败，请查看 logs/indextts.log。";
+    } else {
+      refs.ttsModeText.textContent = "当前为 IndexTTS API 模式，正在等待模型加载完成。";
+    }
     refs.mockNotice.hidden = true;
     refs.ttsControls.hidden = false;
   } else {

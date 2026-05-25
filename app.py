@@ -144,6 +144,8 @@ def get_indextts_health(timeout: float = 2.0) -> dict[str, Any]:
             "model_loaded": bool(payload.get("model_loaded")),
             "version": payload.get("version", "unknown"),
             "error": payload.get("error"),
+            "error_code": payload.get("error_code"),
+            "suggestion": payload.get("suggestion"),
             "supported_tts_options": payload.get("supported_tts_options"),
         }
     except Exception as exc:

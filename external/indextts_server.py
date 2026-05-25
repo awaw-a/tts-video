@@ -318,6 +318,27 @@ def load_model_once() -> None:
         logger.exception("IndexTTS model failed to load")
 
 
+def diagnose_model_error(error: str | None) -> dict:
+    """把常见模型加载错误转换成前端更容易理解的诊断信息。"""
+    if not error:
+        return {}
+
+    normalized = error.lower()
+    if "1455" in normalized or "page file" in normalized:
+        return {
+            "error_code": "windows_pagefile_too_small",
+            "suggestion": "Windows 页面文件/虚拟内存不足，IndexTTS 模型无法加载。请增大系统虚拟内存或关闭其他占用内存的软件后重试。",
+        }
+
+    if "cuda out of memory" in normalized or "cuda oom" in normalized:
+        return {
+            "error_code": "cuda_out_of_memory",
+            "suggestion": "显存不足，建议关闭其他 GPU 程序、缩短文本，或换更大显存的显卡。",
+        }
+
+    return {}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 生命周期：启动时加载模型，退出时交给 Python 回收资源。"""
@@ -351,6 +372,7 @@ def health() -> dict:
     }
     if model_state.error:
         payload["error"] = model_state.error
+        payload.update(diagnose_model_error(model_state.error))
     return payload
 
 
