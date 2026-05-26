@@ -5,13 +5,14 @@ import random
 import sys
 import logging
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from modules.render.ffmpeg_utils import run_ffmpeg
 
@@ -346,7 +347,12 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="IndexTTS API Server", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="IndexTTS API Server", version="0.3.0", lifespan=lifespan)
+app.mount(
+    "/indextts-static",
+    StaticFiles(directory=PROJECT_ROOT / "static"),
+    name="indextts_static",
+)
 
 
 async def save_upload_file(upload_file: UploadFile, output_path: Path) -> Path:
@@ -361,14 +367,26 @@ async def save_upload_file(upload_file: UploadFile, output_path: Path) -> Path:
     return output_path
 
 
+@app.get("/")
+def index() -> FileResponse:
+    """返回 IndexTTS 独立语音调节页面。"""
+    return FileResponse(
+        PROJECT_ROOT / "static" / "indextts.html",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/health")
 def health() -> dict:
     """返回模型加载状态和当前包装服务支持的参数。"""
+    config = load_runtime_config()
     payload = {
         "status": "ok",
         "model_loaded": model_state.model_loaded,
         "version": model_state.version,
+        "max_text_length": config.max_text_length,
         "supported_tts_options": SUPPORTED_TTS_OPTIONS,
+        "default_tts_options": asdict(SynthesisOptions()),
     }
     if model_state.error:
         payload["error"] = model_state.error

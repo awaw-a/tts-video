@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IndexTTS 语音工作台</title>
+    <link rel="stylesheet" href="/indextts-static/indextts.css?v=20260526-standalone" />
+    <script src="/indextts-static/indextts.js?v=20260526-standalone" defer></script>
+  </head>
+  <body>
+    <main class="tts-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">IndexTTS</p>
+          <h1>语音工作台</h1>
+        </div>
+        <div class="status-row" aria-live="polite">
+          <span id="modelBadge" class="badge warning">模型: 检查中</span>
+          <span id="versionBadge" class="badge muted">版本: unknown</span>
+        </div>
+      </header>
+
+      <form id="ttsForm" class="tts-grid">
+        <section class="panel source-panel">
+          <div class="panel-head">
+            <h2>输入</h2>
+            <span id="charCount" class="meta">0 / 1000</span>
+          </div>
+
+          <label class="field">
+            <span>参考音频</span>
+            <input id="voiceInput" name="voice" type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" required />
+          </label>
+
+          <div id="voicePreviewWrap" class="audio-preview" hidden>
+            <p id="voiceFileName"></p>
+            <audio id="voicePreview" controls></audio>
+          </div>
+
+          <label class="field text-field">
+            <span>文本</span>
+            <textarea id="textInput" name="text" maxlength="1000" rows="12" required></textarea>
+          </label>
+        </section>
+
+        <section class="panel controls-panel">
+          <div class="panel-head">
+            <h2>调节</h2>
+            <button id="resetButton" class="ghost-button" type="button">重置</button>
+          </div>
+
+          <div class="control-grid">
+            <label class="field" data-option="speed">
+              <span>语速 <b id="speedValue">1.00x</b></span>
+              <input id="speedInput" name="speed" type="range" min="0.75" max="1.5" step="0.05" value="1" />
+            </label>
+
+            <label class="field" data-option="volume_gain_db">
+              <span>音量增益 <b id="volumeValue">0 dB</b></span>
+              <input id="volumeInput" name="volume_gain_db" type="range" min="-12" max="12" step="1" value="0" />
+            </label>
+
+            <label class="field" data-option="seed">
+              <span>随机种子</span>
+              <input id="seedInput" name="seed" type="number" min="0" max="4294967295" placeholder="随机" />
+            </label>
+
+            <label class="field" data-option="temperature">
+              <span>temperature <b id="temperatureValue">0.80</b></span>
+              <input id="temperatureInput" name="temperature" type="range" min="0.1" max="2" step="0.05" value="0.8" />
+            </label>
+
+            <label class="field" data-option="top_p">
+              <span>top_p <b id="topPValue">0.80</b></span>
+              <input id="topPInput" name="top_p" type="range" min="0.1" max="1" step="0.05" value="0.8" />
+            </label>
+
+            <label class="field" data-option="top_k">
+              <span>top_k</span>
+              <input id="topKInput" name="top_k" type="number" min="1" max="100" value="30" />
+            </label>
+
+            <label class="field wide" data-option="repetition_penalty">
+              <span>repetition_penalty</span>
+              <input id="repetitionInput" name="repetition_penalty" type="number" min="1" max="20" step="0.1" value="10" />
+            </label>
+          </div>
+        </section>
+
+        <section class="panel result-panel">
+          <div class="panel-head">
+            <h2>结果</h2>
+            <a id="downloadLink" class="download-link disabled" href="#" download="indextts-output.wav">下载 WAV</a>
+          </div>
+
+          <div id="resultEmpty" class="empty-state">生成后在这里播放音频</div>
+          <div id="resultReady" class="result-ready" hidden>
+            <audio id="resultAudio" controls></audio>
+            <p id="resultMeta" class="meta"></p>
+          </div>
+        </section>
+
+        <section class="action-panel">
+          <button id="generateButton" class="primary-button" type="submit" disabled>生成语音</button>
+          <p id="statusText" class="status-text">等待模型状态。</p>
+        </section>
+      </form>
+    </main>
+  </body>
+</html>

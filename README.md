@@ -236,9 +236,17 @@ start_all.bat
 
 脚本会在后台启动 IndexTTS API 和 WebUI，不再为每个服务单独弹出窗口。如果检测到 `runtime/*.pid` 中记录的本项目旧服务仍在运行，会先停止这些旧进程再重新启动。它会等待 `http://127.0.0.1:9000/health` 返回 `model_loaded: true`，再启动 `http://127.0.0.1:8000` 并自动打开浏览器。主控制窗口会实时显示 WebUI / IndexTTS 的合并日志；运行中按 `Q` 或 `Ctrl+C` 可以安全停止服务并退出。若检测到 8000/9000 端口已被非 `runtime/*.pid` 记录的程序占用，脚本会报错并提示手动关闭或修改端口，不会自动结束未知进程。
 
+只使用 IndexTTS 语音工作台，不启动视频生成 WebUI：
+
+```bat
+start_tts.bat
+```
+
+该模式只会启动 IndexTTS API，并打开 `http://127.0.0.1:9000`。页面支持上传参考音频、输入文本、调节语速、音量、随机种子、temperature、top_p、top_k、repetition_penalty 等参数，然后在线试听或下载生成的 WAV。若检测到本项目 PID 文件记录的 WebUI 正在运行，该脚本会先停止 WebUI，确保当前模式只保留 IndexTTS 服务。
+
 运行时文件位置：
 
-- PID 文件：`runtime/webui.pid`、`runtime/indextts.pid`
+- PID 文件：`runtime/webui.pid`、`runtime/indextts.pid`、`runtime/start_tts.pid`
 - WebUI 日志：`logs/webui.log`、`logs/webui.err.log`
 - IndexTTS 日志：`logs/indextts.log`、`logs/indextts.err.log`
 

@@ -246,6 +246,7 @@ function Copy-ReleaseScripts {
     Invoke-RobocopyChecked -Source $releaseScriptsSource -Destination $releaseScriptsDest
 
     Copy-Item -LiteralPath (Join-Path $releaseScriptsSource "start.bat") -Destination (Join-Path $PackageRoot "start.bat") -Force
+    Copy-Item -LiteralPath (Join-Path $releaseScriptsSource "start_tts.bat") -Destination (Join-Path $PackageRoot "start_tts.bat") -Force
     Copy-Item -LiteralPath (Join-Path $releaseScriptsSource "stop.bat") -Destination (Join-Path $PackageRoot "stop.bat") -Force
     Copy-Item -LiteralPath (Join-Path $releaseScriptsSource "README_小白使用说明.txt") -Destination (Join-Path $PackageRoot "README_小白使用说明.txt") -Force
 
