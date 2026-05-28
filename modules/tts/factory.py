@@ -2,6 +2,7 @@ from typing import Any
 
 from modules.tts.base import BaseTTS
 from modules.tts.indextts_api import IndexTTSApiTTS
+from modules.tts.mimo_api import MimoApiTTS
 from modules.tts.mock_tts import MockTTS
 
 
@@ -31,5 +32,15 @@ def get_tts_engine(config: Any) -> BaseTTS:
         )
         timeout = int(get_config_value(config, "tts.request_timeout", 600))
         return IndexTTSApiTTS(api_url=api_url, timeout=timeout)
+
+    if backend == "mimo_api":
+        api_url = str(
+            get_config_value(config, "tts.mimo_api_url", "https://api.xiaomimimo.com/v1")
+        )
+        model = str(
+            get_config_value(config, "tts.mimo_model", "mimo-v2.5-tts-voiceclone")
+        )
+        timeout = int(get_config_value(config, "tts.mimo_request_timeout", 600))
+        return MimoApiTTS(api_url=api_url, model=model, timeout=timeout)
 
     raise ValueError(f"不支持的 TTS 后端：{backend}")

@@ -236,19 +236,25 @@ start_all.bat
 
 脚本会在后台启动 IndexTTS API 和 WebUI，不再为每个服务单独弹出窗口。如果检测到 `runtime/*.pid` 中记录的本项目旧服务仍在运行，会先停止这些旧进程再重新启动。它会等待 `http://127.0.0.1:9000/health` 返回 `model_loaded: true`，再启动 `http://127.0.0.1:8000` 并自动打开浏览器。主控制窗口会实时显示 WebUI / IndexTTS 的合并日志；运行中按 `Q` 或 `Ctrl+C` 可以安全停止服务并退出。若检测到 8000/9000 端口已被非 `runtime/*.pid` 记录的程序占用，脚本会报错并提示手动关闭或修改端口，不会自动结束未知进程。
 
-只使用 IndexTTS 语音工作台，不启动视频生成 WebUI：
+只使用 TTS 语音工作台，不启动视频生成 WebUI：
 
 ```bat
 start_tts.bat
 ```
 
-该模式只会启动 IndexTTS API，并打开 `http://127.0.0.1:9000`。页面支持上传参考音频、输入文本、调节语速、音量、随机种子、temperature、top_p、top_k、repetition_penalty 等参数，然后在线试听或下载生成的 WAV。若检测到本项目 PID 文件记录的 WebUI 正在运行，该脚本会先停止 WebUI，确保当前模式只保留 IndexTTS 服务。
+该模式会读取 `runtime/tts_mode.json` 中记录的工具模式；首次使用默认启动 IndexTTS，并打开 `http://127.0.0.1:9000`。页面顶部可以在 IndexTTS 和 MiMoTTS 之间切换。切换时启动控制脚本会停止当前 TTS 服务，再启动目标工具并打开新页面。
+
+- IndexTTS：本地模型推理，支持语速、音量、随机种子、temperature、top_p、top_k、repetition_penalty 等参数。
+- MiMoTTS：调用小米 MiMo `mimo-v2.5-tts-voiceclone` 云 API 做音色克隆，打开 `http://127.0.0.1:9021`。如果后端未检测到 `MIMO_API_KEY`，页面会要求输入 API Key；保存后会写入当前系统用户环境变量，并只在后端使用，不会再返回给前端。
+
+使用 MiMoTTS 时，文本和参考音频会发送到 MiMo API 服务；请只上传本人或已获授权的音频素材。
 
 运行时文件位置：
 
-- PID 文件：`runtime/webui.pid`、`runtime/indextts.pid`、`runtime/start_tts.pid`
+- PID 文件：`runtime/webui.pid`、`runtime/indextts.pid`、`runtime/mimo_tts.pid`、`runtime/start_tts.pid`
 - WebUI 日志：`logs/webui.log`、`logs/webui.err.log`
 - IndexTTS 日志：`logs/indextts.log`、`logs/indextts.err.log`
+- MiMoTTS 日志：`logs/mimo_tts.log`、`logs/mimo_tts.err.log`
 
 开发调试模式：
 

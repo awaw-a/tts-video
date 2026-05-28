@@ -10,6 +10,7 @@ const refs = {
   form: document.querySelector("#ttsForm"),
   modelBadge: document.querySelector("#modelBadge"),
   versionBadge: document.querySelector("#versionBadge"),
+  toolSelect: document.querySelector("#toolSelect"),
   voiceInput: document.querySelector("#voiceInput"),
   voicePreviewWrap: document.querySelector("#voicePreviewWrap"),
   voicePreview: document.querySelector("#voicePreview"),
@@ -134,6 +135,44 @@ async function refreshHealth() {
   }
 }
 
+async function switchTool(targetMode) {
+  if (targetMode === "indextts") {
+    return;
+  }
+  const confirmed = window.confirm("切换到 MiMoTTS 会停止当前 IndexTTS 工具并重新打开 MiMoTTS 页面。");
+  if (!confirmed) {
+    refs.toolSelect.value = "indextts";
+    return;
+  }
+
+  refs.generateButton.disabled = true;
+  refs.toolSelect.disabled = true;
+  setStatus("正在切换到 MiMoTTS。");
+  try {
+    const response = await fetch("/api/tts/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_mode: targetMode }),
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.detail || "切换失败");
+    }
+    const targetUrl = payload.target_url || "http://127.0.0.1:9021/";
+    setStatus("切换请求已发送，新页面会自动打开。");
+    window.open(targetUrl, "_blank");
+    window.setTimeout(() => {
+      window.close();
+      window.location.href = targetUrl;
+    }, 1200);
+  } catch (error) {
+    refs.toolSelect.disabled = false;
+    refs.toolSelect.value = "indextts";
+    setStatus(error.message || "切换失败。", true);
+    syncGenerateButton();
+  }
+}
+
 function startHealthPolling() {
   refreshHealth();
   state.healthTimer = window.setInterval(refreshHealth, 5000);
@@ -248,6 +287,7 @@ function bindEvents() {
   refs.topPInput.addEventListener("input", updateRangeLabels);
   refs.resetButton.addEventListener("click", resetForm);
   refs.form.addEventListener("submit", submitTts);
+  refs.toolSelect.addEventListener("change", () => switchTool(refs.toolSelect.value));
 }
 
 bindEvents();

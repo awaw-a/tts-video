@@ -5,16 +5,20 @@ $script:RuntimeDir = Join-Path $script:ReleaseRoot "runtime"
 $script:LogDir = Join-Path $script:ReleaseRoot "logs"
 $script:WebPidFile = Join-Path $script:RuntimeDir "webui.pid"
 $script:IndexPidFile = Join-Path $script:RuntimeDir "indextts.pid"
+$script:MimoPidFile = Join-Path $script:RuntimeDir "mimo_tts.pid"
 $script:ControllerPidFile = Join-Path $script:RuntimeDir "start_tts.pid"
 $script:StartAllControllerPidFile = Join-Path $script:RuntimeDir "start.pid"
+$script:ModeFile = Join-Path $script:RuntimeDir "tts_mode.json"
+$script:SwitchRequestFile = Join-Path $script:RuntimeDir "tts_switch_request.json"
 $script:PythonExe = Join-Path $script:RuntimeDir "venv\Scripts\python.exe"
 $script:FfmpegBinDir = Join-Path $script:RuntimeDir "ffmpeg\bin"
-$script:TtsWebUrl = "http://127.0.0.1:9000/"
-$script:IndexHealthUrl = "http://127.0.0.1:9000/health"
-$script:StartLogPath = Join-Path $script:LogDir "start_tts_release.log"
 $script:IndexOutLog = Join-Path $script:LogDir "indextts.log"
 $script:IndexErrLog = Join-Path $script:LogDir "indextts.err.log"
+$script:MimoOutLog = Join-Path $script:LogDir "mimo_tts.log"
+$script:MimoErrLog = Join-Path $script:LogDir "mimo_tts.err.log"
+$script:StartLogPath = Join-Path $script:LogDir "start_tts_release.log"
 $script:LogOffsets = @{}
+$script:CurrentMode = $null
 
 function Initialize-Console {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -30,16 +34,61 @@ function Write-StartLog {
     Add-Content -LiteralPath $script:StartLogPath -Encoding UTF8 -Value "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
 }
 
+function Get-ToolUrl {
+    param([string]$Mode)
+    if ($Mode -eq "mimo") {
+        return "http://127.0.0.1:9021/"
+    }
+    return "http://127.0.0.1:9000/"
+}
+
+function Normalize-ToolMode {
+    param([string]$Mode)
+    $clean = ""
+    if ($null -ne $Mode) {
+        $clean = $Mode.Trim().ToLowerInvariant()
+    }
+    if ($clean -in @("indextts", "mimo")) {
+        return $clean
+    }
+    return "indextts"
+}
+
+function Read-ToolMode {
+    if (-not (Test-Path -LiteralPath $script:ModeFile)) {
+        return "indextts"
+    }
+    try {
+        $payload = Get-Content -LiteralPath $script:ModeFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        return Normalize-ToolMode -Mode $payload.mode
+    }
+    catch {
+        return "indextts"
+    }
+}
+
+function Write-ToolMode {
+    param([string]$Mode)
+    $clean = Normalize-ToolMode -Mode $Mode
+    $payload = [ordered]@{
+        mode = $clean
+        url = Get-ToolUrl -Mode $clean
+        updated_at = (Get-Date).ToString("s")
+    }
+    $payload | ConvertTo-Json | Set-Content -LiteralPath $script:ModeFile -Encoding UTF8
+}
+
 function Assert-ReleaseRuntime {
     $required = @(
         $script:PythonExe,
         (Join-Path $script:FfmpegBinDir "ffmpeg.exe"),
         (Join-Path $script:FfmpegBinDir "ffprobe.exe"),
         (Join-Path $script:ReleaseRoot "external\indextts_server.py"),
+        (Join-Path $script:ReleaseRoot "external\mimo_tts_server.py"),
         (Join-Path $script:ReleaseRoot "static\indextts.html"),
+        (Join-Path $script:ReleaseRoot "static\mimo_tts.html"),
         (Join-Path $script:ReleaseRoot "index-tts\checkpoints\config.yaml")
     )
-
     $missing = @()
     foreach ($path in $required) {
         if (-not (Test-Path -LiteralPath $path)) {
@@ -51,10 +100,14 @@ function Assert-ReleaseRuntime {
     }
 }
 
-function Set-ReleaseEnvironment {
+function Set-BaseEnvironment {
     $env:PYTHONUNBUFFERED = "1"
     $env:PYTHONIOENCODING = "utf-8"
     $env:PATH = "$script:FfmpegBinDir;$script:RuntimeDir\python;$env:PATH"
+}
+
+function Set-IndexTtsEnvironment {
+    Set-BaseEnvironment
     $env:INDEXTTS_REPO = Join-Path $script:ReleaseRoot "index-tts"
     $env:INDEXTTS_MODEL_DIR = Join-Path $script:ReleaseRoot "index-tts\checkpoints"
     $env:INDEXTTS_CFG_PATH = Join-Path $script:ReleaseRoot "index-tts\checkpoints\config.yaml"
@@ -227,7 +280,7 @@ function Show-NewLogLines {
         }
         $text = $text -replace "`r`n", "`n" -replace "`r", "`n"
         foreach ($line in ($text -split "`n")) {
-            if ([string]::IsNullOrWhiteSpace($line) -or $line -like '*"GET /health*') {
+            if ([string]::IsNullOrWhiteSpace($line) -or $line -like '*"GET /health*' -or $line -like '*"GET /api/mimo/status*') {
                 continue
             }
             Write-Host "$Prefix $line"
@@ -236,14 +289,43 @@ function Show-NewLogLines {
     catch {}
 }
 
-function Show-AllNewLogs {
-    Show-NewLogLines -Path $script:IndexOutLog -Prefix "[IndexTTS]"
-    Show-NewLogLines -Path $script:IndexErrLog -Prefix "[IndexTTS:ERR]"
+function Show-CurrentLogs {
+    if ($script:CurrentMode -eq "mimo") {
+        Show-NewLogLines -Path $script:MimoOutLog -Prefix "[MiMoTTS]"
+        Show-NewLogLines -Path $script:MimoErrLog -Prefix "[MiMoTTS:ERR]"
+    }
+    else {
+        Show-NewLogLines -Path $script:IndexOutLog -Prefix "[IndexTTS]"
+        Show-NewLogLines -Path $script:IndexErrLog -Prefix "[IndexTTS:ERR]"
+    }
 }
 
-function Start-HiddenIndexTts {
+function Stop-ModeService {
+    param([string]$Mode)
+    $clean = Normalize-ToolMode -Mode $Mode
+    if ($clean -eq "mimo") {
+        Stop-PidFileProcess -Name "MiMoTTS" -PidFile $script:MimoPidFile | Out-Null
+    }
+    else {
+        Stop-PidFileProcess -Name "IndexTTS API" -PidFile $script:IndexPidFile | Out-Null
+    }
+}
+
+function Stop-AllTtsServices {
+    Stop-PidFileProcess -Name "MiMoTTS" -PidFile $script:MimoPidFile | Out-Null
+    Stop-PidFileProcess -Name "IndexTTS API" -PidFile $script:IndexPidFile | Out-Null
+}
+
+function Start-IndexTts {
+    Clear-StalePidFile -PidFile $script:IndexPidFile
+    Assert-PortAvailable -Name "IndexTTS API" -Port 9000 -PidFile $script:IndexPidFile
+    if (Test-PortOwnedByPidFile -Port 9000 -PidFile $script:IndexPidFile) {
+        Write-Host "  IndexTTS API is already running from runtime/indextts.pid."
+        return
+    }
     Reset-LogFile -Path $script:IndexOutLog
     Reset-LogFile -Path $script:IndexErrLog
+    Set-IndexTtsEnvironment
     $process = Start-Process `
         -FilePath $script:PythonExe `
         -ArgumentList @("-u", "-m", "uvicorn", "external.indextts_server:app", "--host", "127.0.0.1", "--port", "9000") `
@@ -256,9 +338,32 @@ function Start-HiddenIndexTts {
     Write-Host "  IndexTTS API PID: $($process.Id)"
 }
 
-function Test-IndexWebReady {
+function Start-MimoTts {
+    Clear-StalePidFile -PidFile $script:MimoPidFile
+    Assert-PortAvailable -Name "MiMoTTS" -Port 9021 -PidFile $script:MimoPidFile
+    if (Test-PortOwnedByPidFile -Port 9021 -PidFile $script:MimoPidFile) {
+        Write-Host "  MiMoTTS is already running from runtime/mimo_tts.pid."
+        return
+    }
+    Reset-LogFile -Path $script:MimoOutLog
+    Reset-LogFile -Path $script:MimoErrLog
+    Set-BaseEnvironment
+    $process = Start-Process `
+        -FilePath $script:PythonExe `
+        -ArgumentList @("-u", "-m", "uvicorn", "external.mimo_tts_server:app", "--host", "127.0.0.1", "--port", "9021") `
+        -WorkingDirectory $script:ReleaseRoot `
+        -RedirectStandardOutput $script:MimoOutLog `
+        -RedirectStandardError $script:MimoErrLog `
+        -WindowStyle Hidden `
+        -PassThru
+    Set-Content -LiteralPath $script:MimoPidFile -Value $process.Id -Encoding ASCII
+    Write-Host "  MiMoTTS PID: $($process.Id)"
+}
+
+function Test-ToolReady {
+    param([string]$Mode)
     try {
-        $response = Invoke-WebRequest -Uri $script:TtsWebUrl -UseBasicParsing -TimeoutSec 3
+        $response = Invoke-WebRequest -Uri (Get-ToolUrl -Mode $Mode) -UseBasicParsing -TimeoutSec 3
         return ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500)
     }
     catch {
@@ -286,15 +391,68 @@ function Wait-Until {
     throw $FailureMessage
 }
 
+function Start-ModeService {
+    param([string]$Mode)
+    $clean = Normalize-ToolMode -Mode $Mode
+    $script:CurrentMode = $clean
+    Write-ToolMode -Mode $clean
+    if ($clean -eq "mimo") {
+        Write-Host "[2/4] Starting MiMoTTS standalone WebUI..."
+        Start-MimoTts
+    }
+    else {
+        Write-Host "[2/4] Starting IndexTTS standalone WebUI..."
+        Start-IndexTts
+    }
+    Write-Host "[3/4] Waiting for $clean WebUI..."
+    Wait-Until `
+        -Condition { Test-ToolReady -Mode $clean } `
+        -TimeoutSeconds 600 `
+        -FailureMessage "$clean WebUI did not become ready. Check logs directory." `
+        -OnTick { Show-CurrentLogs } | Out-Null
+}
+
+function Read-SwitchRequest {
+    if (-not (Test-Path -LiteralPath $script:SwitchRequestFile)) {
+        return $null
+    }
+    try {
+        return Get-Content -LiteralPath $script:SwitchRequestFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    }
+    catch {
+        Remove-Item -LiteralPath $script:SwitchRequestFile -Force -ErrorAction SilentlyContinue
+        return $null
+    }
+}
+
+function Handle-SwitchRequest {
+    $request = Read-SwitchRequest
+    if ($null -eq $request) {
+        return
+    }
+    Remove-Item -LiteralPath $script:SwitchRequestFile -Force -ErrorAction SilentlyContinue
+    $target = Normalize-ToolMode -Mode $request.target_mode
+    if ($target -eq $script:CurrentMode) {
+        return
+    }
+    Write-Host ""
+    Write-Host "[SWITCH] Switching TTS tool from $script:CurrentMode to $target ..."
+    Start-Sleep -Seconds 2
+    Stop-ModeService -Mode $script:CurrentMode
+    Start-ModeService -Mode $target
+    Write-Host "[SWITCH] Opening $target WebUI..."
+    Start-Process (Get-ToolUrl -Mode $target)
+}
+
 function Watch-Console {
     Write-Host ""
     Write-Host "========================================"
-    Write-Host "IndexTTS standalone console"
+    Write-Host "TTS tool console"
     Write-Host "========================================"
-    Write-Host "WebUI:    $script:TtsWebUrl"
-    Write-Host "Health:   $script:IndexHealthUrl"
+    Write-Host "Mode:     $script:CurrentMode"
+    Write-Host "WebUI:    $(Get-ToolUrl -Mode $script:CurrentMode)"
     Write-Host "Logs:     $script:LogDir"
-    Write-Host "Running. Press Q to stop IndexTTS, or press Ctrl+C."
+    Write-Host "Running. Press Q to stop TTS tools, or press Ctrl+C."
     Write-Host "========================================"
     Write-Host ""
 
@@ -302,7 +460,8 @@ function Watch-Console {
     [Console]::TreatControlCAsInput = $true
     try {
         while ($true) {
-            Show-AllNewLogs
+            Show-CurrentLogs
+            Handle-SwitchRequest
             if ([Console]::KeyAvailable) {
                 $key = [Console]::ReadKey($true)
                 if ($key.Key -eq [ConsoleKey]::Q) {
@@ -318,8 +477,8 @@ function Watch-Console {
     finally {
         [Console]::TreatControlCAsInput = $oldMode
         Write-Host ""
-        Write-Host "Stopping IndexTTS..."
-        Stop-PidFileProcess -Name "IndexTTS API" -PidFile $script:IndexPidFile | Out-Null
+        Write-Host "Stopping TTS tools..."
+        Stop-AllTtsServices
         Clear-CurrentControllerPid
     }
 }
@@ -329,10 +488,10 @@ try {
     Initialize-ReleaseDirs
     Write-StartLog "start_tts_release.ps1 entered. root=$script:ReleaseRoot"
     Assert-ReleaseRuntime
-    Set-ReleaseEnvironment
+    Set-BaseEnvironment
 
     Write-Host "========================================"
-    Write-Host "IndexTTS Release standalone startup"
+    Write-Host "TTS tool Release startup"
     Write-Host "========================================"
     Write-Host "Directory: $script:ReleaseRoot"
     Write-Host "Python:    $script:PythonExe"
@@ -344,31 +503,19 @@ try {
     Stop-ControllerIfRunning -Name "start" -PidFile $script:StartAllControllerPidFile
     Register-CurrentController
 
-    Clear-StalePidFile -PidFile $script:IndexPidFile
-    Clear-StalePidFile -PidFile $script:WebPidFile
+    Ensure-LogFile -Path $script:IndexOutLog
+    Ensure-LogFile -Path $script:IndexErrLog
+    Ensure-LogFile -Path $script:MimoOutLog
+    Ensure-LogFile -Path $script:MimoErrLog
+    Remove-Item -LiteralPath $script:SwitchRequestFile -Force -ErrorAction SilentlyContinue
     Stop-PidFileProcess -Name "WebUI" -PidFile $script:WebPidFile | Out-Null
 
-    Assert-PortAvailable -Name "IndexTTS API" -Port 9000 -PidFile $script:IndexPidFile
+    $mode = Read-ToolMode
+    Start-ModeService -Mode $mode
 
-    if (Test-PortOwnedByPidFile -Port 9000 -PidFile $script:IndexPidFile) {
-        Write-Host "[1/4] IndexTTS API is already running from runtime/indextts.pid."
-    }
-    else {
-        Write-Host "[1/4] Starting IndexTTS API with standalone WebUI..."
-        Start-HiddenIndexTts
-    }
-
-    Write-Host "[2/4] Waiting for IndexTTS WebUI..."
-    Wait-Until `
-        -Condition { Test-IndexWebReady } `
-        -TimeoutSeconds 600 `
-        -FailureMessage "IndexTTS WebUI did not become ready. Check logs\indextts.err.log." `
-        -OnTick { Show-AllNewLogs } | Out-Null
-
-    Write-Host "[3/4] Opening browser..."
-    Start-Process $script:TtsWebUrl
-    Write-Host "[4/4] Ready."
-    Write-StartLog "startup completed"
+    Write-Host "[4/4] Opening browser..."
+    Start-Process (Get-ToolUrl -Mode $script:CurrentMode)
+    Write-StartLog "startup completed. mode=$script:CurrentMode"
 
     Watch-Console
     exit 0
@@ -379,6 +526,7 @@ catch {
     Write-Host ""
     Write-Host "If startup failed, check:"
     Write-Host "  logs\indextts.err.log"
+    Write-Host "  logs\mimo_tts.err.log"
     Write-Host "  logs\start_tts_release.log"
     Clear-CurrentControllerPid
     exit 1

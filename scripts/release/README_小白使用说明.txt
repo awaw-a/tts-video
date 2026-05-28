@@ -41,15 +41,22 @@ tts-video Windows x64 一键包使用说明
   data\outputs\{task_id}\final.mp4
 
 
-四、只使用 IndexTTS
+四、只使用 TTS 工具
 ------------------
 如果只想生成语音，不需要生成视频，可以双击：
   start_tts.bat
 
-这个入口只会启动 IndexTTS API，并打开：
+首次使用默认启动 IndexTTS，并打开：
   http://127.0.0.1:9000
 
-页面里可以上传参考音频、输入文本、调节语速、音量、随机种子和采样参数，然后试听或下载 WAV。
+页面顶部可以在 IndexTTS 和 MiMoTTS 之间切换。切换时会停止当前 TTS 服务，再启动新的 TTS 工具。
+
+IndexTTS 是本地模型推理。MiMoTTS 是小米 MiMo 云 API 音色克隆，会打开：
+  http://127.0.0.1:9021
+
+如果 MiMoTTS 页面提示填写 API Key，请输入你的 MiMo API Key。保存后会写入当前系统用户环境变量 MIMO_API_KEY，后续页面不会再显示这个 Key。
+
+使用 MiMoTTS 时，文本和参考音频会发送到 MiMo API 服务。请只上传本人或已获授权的音频素材。
 
 
 五、关闭

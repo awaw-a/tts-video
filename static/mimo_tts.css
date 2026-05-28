@@ -32,6 +32,7 @@ body {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -139,6 +140,25 @@ p {
   color: var(--muted);
 }
 
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+.key-panel {
+  margin-bottom: 12px;
+  border-color: #bfdbfe;
+}
+
+.key-form {
+  display: grid;
+  grid-template-columns: 1fr minmax(110px, 0.16fr);
+  gap: 10px;
+}
+
 .tts-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(380px, 0.92fr);
@@ -148,14 +168,6 @@ p {
     "actions actions";
   gap: 12px;
   align-items: start;
-}
-
-.panel {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-  padding: 14px;
 }
 
 .source-panel {
@@ -212,12 +224,7 @@ p {
   font-weight: 760;
 }
 
-.field b {
-  color: var(--blue);
-  font-weight: 800;
-}
-
-input:not([type="file"]):not([type="range"]),
+input:not([type="file"]),
 textarea {
   width: 100%;
   border: 1px solid #c9d2df;
@@ -226,7 +233,7 @@ textarea {
   color: var(--text);
 }
 
-input:not([type="file"]):not([type="range"]) {
+input:not([type="file"]) {
   min-height: 38px;
   padding: 7px 10px;
 }
@@ -236,11 +243,6 @@ input[type="file"] {
   font-size: 12px;
 }
 
-input[type="range"] {
-  width: 100%;
-  accent-color: var(--blue);
-}
-
 textarea {
   min-height: 322px;
   resize: vertical;
@@ -248,28 +250,15 @@ textarea {
   line-height: 1.58;
 }
 
+.controls-panel textarea {
+  min-height: 168px;
+}
+
 input:focus,
+select:focus,
 textarea:focus {
   outline: 2px solid rgba(37, 99, 235, 0.24);
   border-color: var(--blue);
-}
-
-.control-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.control-grid .field {
-  margin-bottom: 0;
-}
-
-.wide {
-  grid-column: 1 / -1;
-}
-
-.disabled-field {
-  opacity: 0.55;
 }
 
 .audio-preview,
@@ -281,10 +270,17 @@ textarea:focus {
 
 .audio-preview p,
 .meta,
-.status-text {
+.status-text,
+.note {
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.note {
+  border-top: 1px solid var(--soft-line);
+  padding-top: 10px;
+  line-height: 1.45;
 }
 
 audio {
@@ -367,7 +363,7 @@ audio {
 
   .topbar,
   .action-panel,
-  .control-grid {
+  .key-form {
     grid-template-columns: 1fr;
     display: grid;
     align-items: start;

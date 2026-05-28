@@ -4,6 +4,7 @@ $script:ReleaseRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $script:RuntimeDir = Join-Path $script:ReleaseRoot "runtime"
 $script:WebPidFile = Join-Path $script:RuntimeDir "webui.pid"
 $script:IndexPidFile = Join-Path $script:RuntimeDir "indextts.pid"
+$script:MimoPidFile = Join-Path $script:RuntimeDir "mimo_tts.pid"
 
 function Initialize-Console {
     try { chcp.com 65001 | Out-Null } catch {}
@@ -91,16 +92,17 @@ try {
     Write-Host "只停止 runtime/*.pid 中记录的本项目进程，不会按端口强杀未知程序。"
     Write-Host ""
 
-    $hadPid = (Test-Path -LiteralPath $script:WebPidFile) -or (Test-Path -LiteralPath $script:IndexPidFile)
+    $hadPid = (Test-Path -LiteralPath $script:WebPidFile) -or (Test-Path -LiteralPath $script:IndexPidFile) -or (Test-Path -LiteralPath $script:MimoPidFile)
     Stop-PidFileProcess -Name "WebUI" -PidFile $script:WebPidFile | Out-Null
     Stop-PidFileProcess -Name "IndexTTS API" -PidFile $script:IndexPidFile | Out-Null
+    Stop-PidFileProcess -Name "MiMoTTS" -PidFile $script:MimoPidFile | Out-Null
 
     if (-not $hadPid) {
         Write-Host ""
         Write-Host "[INFO] 没有找到正在运行的本项目服务。"
     }
 
-    foreach ($port in @(8000, 9000)) {
+    foreach ($port in @(8000, 9000, 9021)) {
         $owners = Get-PortOwnerPids -Port $port
         if ($owners -and $owners.Count -gt 0) {
             Write-Host "[INFO] 端口 $port 仍被 PID $($owners -join ', ') 占用。它们不是当前 PID 文件记录的进程，本脚本不会停止。"

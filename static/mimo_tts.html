@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MiMoTTS 音色克隆工作台</title>
+    <link rel="stylesheet" href="/mimo-static/mimo_tts.css?v=20260528-mimo" />
+    <script src="/mimo-static/mimo_tts.js?v=20260528-mimo" defer></script>
+  </head>
+  <body>
+    <main class="tts-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">MiMoTTS</p>
+          <h1>音色克隆工作台</h1>
+        </div>
+        <div class="status-row" aria-live="polite">
+          <label class="tool-switch">
+            <span>TTS 工具</span>
+            <select id="toolSelect">
+              <option value="indextts">IndexTTS</option>
+              <option value="mimo" selected>MiMoTTS</option>
+            </select>
+          </label>
+          <span id="keyBadge" class="badge warning">API Key: 检查中</span>
+          <span id="modelBadge" class="badge muted">模型: loading</span>
+        </div>
+      </header>
+
+      <section id="apiKeyPanel" class="panel key-panel" hidden>
+        <div class="panel-head">
+          <h2>MiMo API Key</h2>
+          <span class="meta">保存到当前系统用户环境变量 MIMO_API_KEY</span>
+        </div>
+        <form id="apiKeyForm" class="key-form">
+          <input id="apiKeyInput" name="api_key" type="password" autocomplete="off" placeholder="输入 MiMo API Key" required />
+          <button id="saveKeyButton" class="primary-button" type="submit">保存</button>
+        </form>
+      </section>
+
+      <form id="ttsForm" class="tts-grid">
+        <section class="panel source-panel">
+          <div class="panel-head">
+            <h2>输入</h2>
+            <span id="charCount" class="meta">0 / 1000</span>
+          </div>
+
+          <label class="field">
+            <span>参考音频</span>
+            <input id="voiceInput" name="voice" type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" required />
+          </label>
+
+          <div id="voicePreviewWrap" class="audio-preview" hidden>
+            <p id="voiceFileName"></p>
+            <audio id="voicePreview" controls></audio>
+          </div>
+
+          <label class="field text-field">
+            <span>合成文本</span>
+            <textarea id="textInput" name="text" maxlength="1000" rows="12" required></textarea>
+          </label>
+        </section>
+
+        <section class="panel controls-panel">
+          <div class="panel-head">
+            <h2>风格指令</h2>
+            <button id="resetButton" class="ghost-button" type="button">重置</button>
+          </div>
+
+          <label class="field">
+            <span>语气与风格</span>
+            <textarea id="stylePromptInput" name="style_prompt" rows="7" placeholder="例如：用自然、亲切、略带笑意的语气朗读。"></textarea>
+          </label>
+
+          <div class="note">
+            MiMo 音色克隆会把文本和参考音频发送到小米 MiMo API。参考音频支持 wav、mp3、m4a，其中 m4a 会由后端转为 wav。
+          </div>
+        </section>
+
+        <section class="panel result-panel">
+          <div class="panel-head">
+            <h2>结果</h2>
+            <a id="downloadLink" class="download-link disabled" href="#" download="mimo-output.wav">下载 WAV</a>
+          </div>
+
+          <div id="resultEmpty" class="empty-state">生成后在这里播放音频</div>
+          <div id="resultReady" class="result-ready" hidden>
+            <audio id="resultAudio" controls></audio>
+            <p id="resultMeta" class="meta"></p>
+          </div>
+        </section>
+
+        <section class="action-panel">
+          <button id="generateButton" class="primary-button" type="submit" disabled>生成语音</button>
+          <p id="statusText" class="status-text">正在检查 MiMo 配置。</p>
+        </section>
+      </form>
+    </main>
+  </body>
+</html>

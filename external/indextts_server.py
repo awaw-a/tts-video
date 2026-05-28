@@ -13,7 +13,14 @@ from uuid import uuid4
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
+from modules.core.tts_tool import (
+    get_tts_tool_url,
+    read_tts_tool_mode,
+    request_tts_tool_switch,
+    write_tts_tool_mode,
+)
 from modules.render.ffmpeg_utils import run_ffmpeg
 
 logger = logging.getLogger("indextts_server")
@@ -76,6 +83,10 @@ class SynthesisOptions:
     top_p: float = 0.8
     top_k: int = 30
     repetition_penalty: float = 10.0
+
+
+class ToolSwitchRequest(BaseModel):
+    target_mode: str
 
 
 model_state = ModelState()
@@ -343,6 +354,7 @@ def diagnose_model_error(error: str | None) -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 生命周期：启动时加载模型，退出时交给 Python 回收资源。"""
+    write_tts_tool_mode("indextts")
     load_model_once()
     yield
 
@@ -392,6 +404,27 @@ def health() -> dict:
         payload["error"] = model_state.error
         payload.update(diagnose_model_error(model_state.error))
     return payload
+
+
+@app.get("/api/tts/mode")
+def tts_mode() -> dict[str, Any]:
+    """返回当前 TTS 工具模式。"""
+    mode = read_tts_tool_mode()
+    return {
+        "mode": mode,
+        "available_modes": ["indextts", "mimo"],
+        "url": get_tts_tool_url(mode),
+    }
+
+
+@app.post("/api/tts/switch")
+def switch_tts_tool(payload: ToolSwitchRequest) -> dict[str, Any]:
+    """请求启动控制脚本切换到另一个 TTS 工具。"""
+    try:
+        switch_payload = request_tts_tool_switch(payload.target_mode, source_mode="indextts")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"status": "switch_requested", **switch_payload}
 
 
 @app.post("/synthesize")

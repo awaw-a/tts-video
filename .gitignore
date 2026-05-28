@@ -31,6 +31,7 @@ data/cache/*
 data/voices/*
 !data/voices/.gitkeep
 data/indextts_server/
+data/mimo_tts_server/
 
 # One-click runtime files and logs.
 logs/

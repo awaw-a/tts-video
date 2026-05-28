@@ -24,3 +24,6 @@ tts:
   indextts_api_url: "http://127.0.0.1:9000"
   request_timeout: 600
   split_by_sentence: false
+  mimo_api_url: "https://api.xiaomimimo.com/v1"
+  mimo_model: "mimo-v2.5-tts-voiceclone"
+  mimo_request_timeout: 600

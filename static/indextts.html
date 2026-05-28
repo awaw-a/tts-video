@@ -15,6 +15,13 @@
           <h1>语音工作台</h1>
         </div>
         <div class="status-row" aria-live="polite">
+          <label class="tool-switch">
+            <span>TTS 工具</span>
+            <select id="toolSelect">
+              <option value="indextts" selected>IndexTTS</option>
+              <option value="mimo">MiMoTTS</option>
+            </select>
+          </label>
           <span id="modelBadge" class="badge warning">模型: 检查中</span>
           <span id="versionBadge" class="badge muted">版本: unknown</span>
         </div>

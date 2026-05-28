@@ -53,6 +53,9 @@ class TTSConfig:
     indextts_api_url: str = "http://127.0.0.1:9000"
     request_timeout: int = 600
     split_by_sentence: bool = False
+    mimo_api_url: str = "https://api.xiaomimimo.com/v1"
+    mimo_model: str = "mimo-v2.5-tts-voiceclone"
+    mimo_request_timeout: int = 600
 
 
 @dataclass
