@@ -350,9 +350,40 @@ input[type="range"] {
   line-height: 1.45;
 }
 
+.tts-backend-field,
+.key-panel {
+  margin-bottom: 10px;
+}
+
+.key-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.key-panel strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 13px;
+}
+
+.key-panel p {
+  color: #1e3a8a;
+  font-size: 12px;
+}
+
+.key-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(104px, auto);
+  gap: 8px;
+}
+
 .tts-controls {
   display: grid;
   gap: 10px;
+}
+
+.compact-textarea {
+  min-height: 96px;
 }
 
 .advanced-box {
@@ -761,6 +792,7 @@ audio,
 
   .material-topline,
   .form-grid,
+  .key-form,
   .action-card {
     grid-template-columns: 1fr;
   }

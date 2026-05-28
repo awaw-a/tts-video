@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>静态角色口播视频生成器</title>
-    <link rel="stylesheet" href="/static/style.css?v=20260525-health-poll" />
+    <link rel="stylesheet" href="/static/style.css?v=20260528-main-mimo" />
   </head>
   <body>
     <main class="app-shell">
@@ -145,8 +145,35 @@
             </div>
           </div>
 
+          <label class="field tts-backend-field">
+            <span>TTS 后端</span>
+            <select id="ttsBackendSelect" name="tts_backend">
+              <option value="indextts_api">IndexTTS</option>
+              <option value="mimo_api">MiMoTTS</option>
+              <option value="mock">Mock</option>
+            </select>
+          </label>
+
           <div id="mockNotice" class="notice" hidden>
             当前为 mock 模式，上传音频将直接作为最终音频使用。
+          </div>
+
+          <div id="mimoKeyPanel" class="notice key-panel" hidden>
+            <div>
+              <strong>MiMo API Key 未配置</strong>
+              <p>保存后只写入后端环境，前端不会再显示完整 Key。</p>
+            </div>
+            <div id="mimoKeyForm" class="key-form">
+              <input id="mimoApiKeyInput" type="password" autocomplete="off" placeholder="输入 MiMo API Key" />
+              <button id="saveMimoKeyButton" class="secondary-button" type="button">保存 Key</button>
+            </div>
+          </div>
+
+          <div id="mimoControls" class="tts-controls" hidden>
+            <label class="field">
+              <span>MiMo 风格指令</span>
+              <textarea id="mimoStylePrompt" name="tts_style_prompt" class="compact-textarea" rows="4" maxlength="500" placeholder="可选：描述语气、情绪、说话风格；留空则只使用参考音频音色。"></textarea>
+            </label>
           </div>
 
           <div id="ttsControls" class="tts-controls" hidden>
@@ -221,6 +248,6 @@
       </form>
     </main>
 
-    <script src="/static/main.js?v=20260525-health-poll"></script>
+    <script src="/static/main.js?v=20260528-main-mimo"></script>
   </body>
 </html>
