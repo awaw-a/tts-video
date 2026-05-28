@@ -1,5 +1,7 @@
 param(
-    [switch]$SkipModels
+    [switch]$SkipModels,
+    [Alias("Lite", "SkipIndexTTS")]
+    [switch]$MainOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -78,7 +80,12 @@ function Install-PythonRequirements {
     Write-Step "Installing Python requirements"
     Invoke-Checked $PythonPath @("-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel")
     Invoke-Checked $PythonPath @("-m", "pip", "install", "-r", "requirements.txt")
-    Invoke-Checked $PythonPath @("-m", "pip", "install", "-r", "requirements-indextts.txt")
+    if ($MainOnly) {
+        Write-Host "Skipping requirements-indextts.txt because -MainOnly was provided."
+    }
+    else {
+        Invoke-Checked $PythonPath @("-m", "pip", "install", "-r", "requirements-indextts.txt")
+    }
     Invoke-Checked $PythonPath @("-m", "pip", "check")
 }
 
@@ -206,10 +213,25 @@ function Download-IndexTTSModels {
 function Verify-Install {
     Write-Step "Verifying installation"
 
-    Invoke-Checked $PythonPath @("-c", "import fastapi, uvicorn, requests, torch, torchaudio, transformers, huggingface_hub; print('Python dependencies OK')")
-    Invoke-Checked $PythonPath @("-c", "from pathlib import Path; missing=[p for p in ['third_party/ffmpeg/windows/bin/ffmpeg.exe','third_party/ffmpeg/windows/bin/ffprobe.exe','index-tts/indextts'] if not Path(p).exists()]; raise SystemExit('Missing: '+', '.join(missing) if missing else 0)")
+    $env:PATH = "$FfmpegBinDir;$env:PATH"
+    Invoke-Checked $PythonPath @("-c", "import fastapi, uvicorn, requests, yaml, PIL, pydub; from modules.tts.mimo_api import MimoApiTTS; print('Main WebUI dependencies OK')")
 
-    if (-not $SkipModels) {
+    if (-not $MainOnly) {
+        Invoke-Checked $PythonPath @("-c", "import torch, torchaudio, transformers, huggingface_hub; print('IndexTTS dependencies OK')")
+    }
+
+    $requiredPaths = @(
+        "third_party/ffmpeg/windows/bin/ffmpeg.exe",
+        "third_party/ffmpeg/windows/bin/ffprobe.exe"
+    )
+    if (-not $MainOnly) {
+        $requiredPaths += "index-tts/indextts"
+    }
+
+    $requiredPathsLiteral = ($requiredPaths | ForEach-Object { "'$_'" }) -join ","
+    Invoke-Checked $PythonPath @("-c", "from pathlib import Path; missing=[p for p in [$requiredPathsLiteral] if not Path(p).exists()]; raise SystemExit('Missing: '+', '.join(missing) if missing else 0)")
+
+    if ((-not $MainOnly) -and (-not $SkipModels)) {
         Invoke-Checked $PythonPath @("-c", "from pathlib import Path; missing=[p for p in ['index-tts/checkpoints/config.yaml','index-tts/checkpoints/gpt.pth','index-tts/checkpoints/s2mel.pth','index-tts/checkpoints/qwen0.6bemo4-merge/model.safetensors'] if not Path(p).exists()]; raise SystemExit('Missing model files: '+', '.join(missing) if missing else 0)")
     }
 }
@@ -220,10 +242,21 @@ Write-Host "Project: $ProjectRoot"
 Ensure-Venv310
 Install-PythonRequirements
 Install-Ffmpeg
-Ensure-IndexTTSRepo
-Patch-IndexTTSCachePath
-Download-IndexTTSModels
+if ($MainOnly) {
+    Write-Step "Skipping IndexTTS repository and model setup"
+    Write-Host "-MainOnly installs the main WebUI, MiMoTTS, mock mode, and ffmpeg only."
+}
+else {
+    Ensure-IndexTTSRepo
+    Patch-IndexTTSCachePath
+    Download-IndexTTSModels
+}
 Verify-Install
 
 Write-Host ""
-Write-Host "Install complete. Run start_all.bat to start the project." -ForegroundColor Green
+if ($MainOnly) {
+    Write-Host "Install complete. Run scripts\run_app_server.bat for MiMoTTS/mock mode, or install IndexTTS later for start_all.bat." -ForegroundColor Green
+}
+else {
+    Write-Host "Install complete. Run start_all.bat to start the project." -ForegroundColor Green
+}
